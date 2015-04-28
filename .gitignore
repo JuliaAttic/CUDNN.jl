@@ -1,3 +1,4 @@
 *.jl.cov
 *.jl.mem
 v0.?
+setenv.sh
