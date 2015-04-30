@@ -1,0 +1,17 @@
+using Clang
+run(wrap_c.init(headers = ["/share/apps/cuDNN/cudnn-6.5-linux-x64-v2/cudnn.h"],
+                # index = None,
+                common_file="libcudnn_types.jl",
+                output_file="libcudnn.jl",
+                # output_dir = "",
+                # clang_args = ASCIIString[],
+                # clang_includes = ["/usr/lib/clang/3.4.2/include","/usr/local/cuda/include","/usr/include"],
+                clang_includes = ["/usr/local/cuda-6.5/include","/usr/lib/clang/3.4.2/include"],
+                # clang_diagnostics = true,
+                header_wrapped=(header,cursorname)->(contains(cursorname,"cudnn")),
+                header_library=x->"libcudnn",
+                # header_outputfile = None,
+                cursor_wrapped=(cursorname,cursor)->!isempty(cursorname),
+                # options = InternalOptions(),
+                # rewriter = x->x,
+                ))
