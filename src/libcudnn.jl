@@ -18,13 +18,13 @@ function cudnnDestroy(handle::cudnnHandle_t)
     ccall((:cudnnDestroy,libcudnn),cudnnStatus_t,(cudnnHandle_t,),handle)
 end
 
-function cudnnSetStream(handle::cudnnHandle_t,streamId::cudaStream_t)
-    ccall((:cudnnSetStream,libcudnn),cudnnStatus_t,(cudnnHandle_t,cudaStream_t),handle,streamId)
-end
+# function cudnnSetStream(handle::cudnnHandle_t,streamId::cudaStream_t)
+#     ccall((:cudnnSetStream,libcudnn),cudnnStatus_t,(cudnnHandle_t,cudaStream_t),handle,streamId)
+# end
 
-function cudnnGetStream(handle::cudnnHandle_t,streamId::Ptr{cudaStream_t})
-    ccall((:cudnnGetStream,libcudnn),cudnnStatus_t,(cudnnHandle_t,Ptr{cudaStream_t}),handle,streamId)
-end
+# function cudnnGetStream(handle::cudnnHandle_t,streamId::Ptr{cudaStream_t})
+#     ccall((:cudnnGetStream,libcudnn),cudnnStatus_t,(cudnnHandle_t,Ptr{cudaStream_t}),handle,streamId)
+# end
 
 function cudnnCreateTensorDescriptor(tensorDesc::Ptr{cudnnTensorDescriptor_t})
     ccall((:cudnnCreateTensorDescriptor,libcudnn),cudnnStatus_t,(Ptr{cudnnTensorDescriptor_t},),tensorDesc)
