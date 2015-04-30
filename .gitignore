@@ -2,3 +2,5 @@
 *.jl.mem
 v0.?
 setenv.sh
+*~
+foo*
