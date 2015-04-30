@@ -1,5 +1,6 @@
 module CUDNN
 
-# package code goes here
+include("libcudnn_types.jl")
+include("libcudnn.jl")
 
 end # module
