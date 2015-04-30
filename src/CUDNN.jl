@@ -9,9 +9,10 @@ include("libcudnn.jl")
 include("tensor.jl")
 
 # setup cudnn handle
-cudnnhandle = cudnnHandle_t[0]
-cudnnCreate(cudnnhandle)
+cudnnHandlePtr = cudnnHandle_t[0]
+cudnnCreate(cudnnHandlePtr)
+cudnnHandle = cudnnHandlePtr[1]
 # destroy cudnn handle at julia exit
-atexit(()->cudnnDestroy(cudnnhandle[1]))
+atexit(()->cudnnDestroy(cudnnHandle))
 
 end # module
