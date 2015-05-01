@@ -1,11 +1,77 @@
 using CUDArt
 using CUDNN
+using KUnet
+
+#x = reshape(Float64[1:21], (1,1,3,7))
+x = rand(1,1,4,5)
+ex = exp(x)
+sx = sum(ex,3)
+px = ex ./ sx
+
+y = CUDNN.Tensor(x)
+CUDNN.cudnnSoftmaxForward(y)
+@show maximum(abs(px - to_host(y)))
+
+dy = to_host(y)
+for j=1:size(dy,4)
+    #y1 = 0.5 / dy[1,1,1,j]
+    i=rand(1:size(dy,3))
+    y1 = 0.5 / dy[1,1,i,j]
+    dy[:,:,:,j] = y1
+    dy[:,:,i,j] = -y1
+end
+dy = CUDNN.Tensor(dy)
+dx = zeros(dy)
+CUDNN.cudnnSoftmaxBackward(y, dy, dx)
+dump(squeeze(to_host(y), (1,2)))
+dump(squeeze(to_host(dx), (1,2)))
+@show maximum(map(min, abs(to_host(y)-to_host(dx)), abs(to_host(y)-1.0-to_host(dx))))
+
+if false
+
+for n=3:8
+    @show n
+    try
+        dims = [(n+1):-1:2]
+        x = CUDNN.Tensor(rand(dims...))
+        y = CUDNN.Tensor(rand(dims...))
+        dx = CUDNN.Tensor(rand(dims...))
+        dy = CUDNN.Tensor(rand(dims...))
+        CUDNN.cudnnActivationBackward(CUDNN.CUDNN_ACTIVATION_RELU, y, dy, x, dx)
+        CUDNN.cudnnActivationForward(CUDNN.CUDNN_ACTIVATION_RELU, x)
+        CUDNN.cudnnScaleTensor(x, pi)
+        CUDNN.cudnnSetTensor(x, pi)
+        CUDNN.cudnnTransformTensor(2.0, x, 3.0, y)
+        bdim = ones(dims); bdim[1]=dims[1]; bdim[2]=dims[2]
+        bias = CUDNN.Tensor(rand(bdim...))
+        CUDNN.cudnnAddTensor(CUDNN.CUDNN_ADD_IMAGE, 1, bias, 1, x)
+    catch y
+        println(y)
+    end
+end
+
+
+x = CUDNN.Tensor(rand(5,4,3,2))
+y = copy(x)
+CUDNN.cudnnActivationForward(CUDNN.CUDNN_ACTIVATION_RELU, y)
+
+l1 = KUnet.Layer()
+y1 = to_host(x)
+KUnet.relu(l1,y1)
+@show isequal(y1,to_host(y))
+
+dy = CUDNN.Tensor(rand(5,4,3,2))
+dx = copy(dy)
+# x0h = to_host(x); x0h[1]=0; x0=CUDNN.Tensor(x0h)
+CUDNN.cudnnActivationBackward(CUDNN.CUDNN_ACTIVATION_RELU, y, dy, x, dx)
+
+dx1 = to_host(dy)
+KUnet.relu(l1,y1,dx1)
+@show isequal(dx1,to_host(dx))
 
 x = CUDNN.Tensor(ones(5,4,3,2))
 @show to_host(x)
 @show to_host(CUDNN.cudnnScaleTensor(x, pi))
-
-if false
 
 x = CUDNN.Tensor(rand(5,4,3,2))
 @show to_host(x)
