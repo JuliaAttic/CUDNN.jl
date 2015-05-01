@@ -1,0 +1,76 @@
+2015-05-01    <dyuret@ku.edu.tr>
+
+	* dims: Supported ops based on tensor dimension.
+
+	0: CUDNN_STATUS_SUCCESS
+	3: CUDNN_STATUS_BAD_PARAM
+	9: CUDNN_STATUS_NOT_SUPPORTED
+
+	1  2  3  4  5  6  7  8  9+ 	op
+	3  3  0  0  0  0  0  0  9	cudnnSetTensorNdDescriptor
+	-  -  9	 0  0  9  9  9	-	cudnnScaleTensor
+	-  -  9	 0  0  9  9  9	-	cudnnSetTensor
+	-  -  9	 0  9  9  9  9	-	cudnnAddTensor
+	-  -  9	 0  9  9  9  9	-	cudnnTransformTensor
+	-  -  9	 0  9  9  9  9	-	cudnnActivationForward
+	-  -  9	 0  9  9  9  9	-	cudnnActivationBackward
+	-  -  9	 0  9  9  9  9	-	cudnnSoftmaxBackward
+
+	* TODO: High level implementations completed:
+	+ means completed
+	- means no need for high level impl
+
+	- cudnnGetVersion
+	- cudnnGetErrorString
+	- cudnnCreate
+	- cudnnDestroy
+	- cudnnSetStream
+	- cudnnGetStream
+	+ cudnnCreateTensorDescriptor
+	- cudnnSetTensor4dDescriptor
+	- cudnnSetTensor4dDescriptorEx
+	- cudnnGetTensor4dDescriptor
+	+ cudnnSetTensorNdDescriptor
+	+ cudnnGetTensorNdDescriptor
+	+ cudnnDestroyTensorDescriptor
+	+ cudnnTransformTensor
+	+ cudnnAddTensor
+	+ cudnnSetTensor
+	+ cudnnScaleTensor
+	cudnnCreateFilterDescriptor
+	cudnnSetFilter4dDescriptor
+	cudnnGetFilter4dDescriptor
+	cudnnSetFilterNdDescriptor
+	cudnnGetFilterNdDescriptor
+	cudnnDestroyFilterDescriptor
+	cudnnCreateConvolutionDescriptor
+	cudnnSetConvolution2dDescriptor
+	cudnnGetConvolution2dDescriptor
+	cudnnGetConvolution2dForwardOutputDim
+	cudnnSetConvolutionNdDescriptor
+	cudnnGetConvolutionNdDescriptor
+	cudnnGetConvolutionNdForwardOutputDim
+	cudnnDestroyConvolutionDescriptor
+	cudnnGetConvolutionForwardAlgorithm
+	cudnnGetConvolutionForwardWorkspaceSize
+	cudnnConvolutionForward
+	cudnnConvolutionBackwardBias
+	cudnnConvolutionBackwardFilter
+	cudnnConvolutionBackwardData
+	cudnnIm2Col
+	+ cudnnSoftmaxForward
+	+ cudnnSoftmaxBackward
+	cudnnCreatePoolingDescriptor
+	cudnnSetPooling2dDescriptor
+	cudnnGetPooling2dDescriptor
+	cudnnSetPoolingNdDescriptor
+	cudnnGetPoolingNdDescriptor
+	cudnnGetPoolingNdForwardOutputDim
+	cudnnGetPooling2dForwardOutputDim
+	cudnnDestroyPoolingDescriptor
+	cudnnPoolingForward
+	cudnnPoolingBackward
+	+ cudnnActivationForward
+	+ cudnnActivationBackward
+
+
