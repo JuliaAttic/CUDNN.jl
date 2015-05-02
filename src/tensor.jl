@@ -42,7 +42,6 @@ Base.fill!(src::Tensor,value::Number)=cudnnSetTensor(src,value)
 Base.scale!(src::Tensor, alpha::Number)=cudnnScaleTensor(src,alpha)
 
 # Read the tensor descriptor (mostly for debugging)
-
 cudnnGetTensorNdDescriptor(t::Tensor)=cudnnGetTensorNdDescriptor(t.desc)
 function cudnnGetTensorNdDescriptor(td::cudnnTensorDescriptor_t, nbDimsRequested=8)
     dataType = cudnnDataType_t[0]
