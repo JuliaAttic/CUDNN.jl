@@ -1,8 +1,7 @@
 using Base.Test
 
 # Comment this out if you don't want lots of messages:
-Base.Test.default_handler(r::Base.Test.Success) = info("$(r.expr)")
-
+# Base.Test.default_handler(r::Base.Test.Success) = info("$(r.expr)")
 
 # See which operations support which dimensions:
 function testdims()
@@ -27,7 +26,6 @@ function testdims()
         end
     end
 end
-
 
 using CUDNN: cudnnTensorDescriptor_t, cudnnCreateTensorDescriptor, cudnnSetTensor4dDescriptor, CUDNN_TENSOR_NCHW, CUDNN_DATA_DOUBLE, cudnnDataType_t, cudnnGetTensor4dDescriptor
 d = cudnnTensorDescriptor_t[0]
@@ -134,4 +132,30 @@ tdx = zeros(tdy)
 dx = copy(y); dx[c] .-= 1
 @test epseq(to_host(cudnnSoftmaxBackward(ty, tdy, tdx)), dx)
 
+# Discovering what pooling does:
+# using CUDNN: cudnnPoolingDescriptor_t, cudnnCreatePoolingDescriptor, cudnnSetPooling2dDescriptor
+# # x = rand(5,4,1,1)
+# x = reshape(Float64[1:20], 5, 4, 1, 1)
+# tx = Tensor(x)
+# pdptr = Array(cudnnPoolingDescriptor_t, 1)
+# cudnnCreatePoolingDescriptor(pdptr)
+# pd = pdptr[1]
+# using CUDNN: CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING, CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING, CUDNN_POOLING_MAX
+# #cudnnSetPooling2dDescriptor(pd, CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING, 3, 3, 0, 0, 1, 1)
+# cudnnSetPooling2dDescriptor(pd, CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING, 3, 3, 0, 0, 1, 1)
+# #cudnnSetPooling2dDescriptor(pd, CUDNN_POOLING_MAX, 3, 3, 0, 0, 1, 1)
+# ty = Tensor(ones(10,9,1,1))
+# using CUDNN: cudnnHandle, ptr, cudnnPoolingForward
+# cudnnPoolingForward(cudnnHandle, pd, ptr(1,tx), tx.desc, tx.data.ptr, ptr(0,ty), ty.desc, ty.data.ptr)
+# y = to_host(ty)
+# dump(x)
+# dump(y)
 
+using CUDNN: PoolingDescriptor, free, CUDNN_POOLING_MAX, cudnnGetPoolingNdDescriptor
+pd = PoolingDescriptor((3,3); padding=(2,2), stride=(1,1), mode=CUDNN_POOLING_MAX)
+@test cudnnGetPoolingNdDescriptor(pd) == (CUDNN_POOLING_MAX, length(pd.dims), pd.dims, pd.padding, pd.stride)
+# free(pd)
+
+# Test forward and backward:
+
+:ok
