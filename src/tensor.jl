@@ -20,27 +20,26 @@ type Tensor
     end
 end
 
-# Basic array functions
-# TODO: Some of these create unnecessary host arrays
-# TODO: Make these work with InplaceOps.jl
+# CUDArt functions
+CUDArt.to_host(t::Tensor)=to_host(t.data)
+CUDArt.free(t::Tensor)=(free(t.data); cudnnDestroyTensorDescriptor(t.desc))
 
+# Basic array functions
+# TODO: Some of these create unnecessary host arrays, need arrayless constructor.
+# TODO: Make these work with InplaceOps.jl
 Base.eltype(t::Tensor)=eltype(t.data)
-Base.zeros(t::Tensor)=Tensor(zeros(to_host(t)))
-Base.ones(t::Tensor)=Tensor(ones(to_host(t)))
-Base.similar(t::Tensor)=Tensor(to_host(t))
+Base.ndims(t::Tensor)=ndims(t.data)
+Base.size(t::Tensor)=size(t.data)
+Base.strides(t::Tensor)=strides(to_host(t)) # CUDArt does not have strides?
+Base.size(t::Tensor,n)=size(t.data,n)
+Base.stride(t::Tensor,n)=stride(t.data,n)
+Base.zeros(t::Tensor)=Tensor(zeros(eltype(t), size(t)))
+Base.ones(t::Tensor)=Tensor(ones(eltype(t), size(t)))
+Base.similar(t::Tensor)=Tensor(Array(eltype(t), size(t)))
 Base.copy(t::Tensor)=Tensor(to_host(t))
 Base.copy!(dest::Tensor,src::Tensor)=cudnnTransformTensor(1, src, 0, dest)
 Base.fill!(src::Tensor,value::Number)=cudnnSetTensor(src,value)
 Base.scale!(src::Tensor, alpha::Number)=cudnnScaleTensor(src,alpha)
-
-# CUDArt functions
-
-CUDArt.to_host(t::Tensor)=to_host(t.data)
-CUDArt.free(t::Tensor)=(free(t.data); cudnnDestroyTensorDescriptor(t.desc))
-
-# For cudnn functions that require a pointer to a number
-
-ptr(x,a)=eltype(a)[x]
 
 # Read the tensor descriptor (mostly for debugging)
 
@@ -54,6 +53,9 @@ function cudnnGetTensorNdDescriptor(td::cudnnTensorDescriptor_t, nbDimsRequested
     return (dataType[1], nbDims[1], dimA[1:nbDims[1]], strideA[1:nbDims[1]])
     # nbDimsRequested > 8 gives error
 end
+
+# For cudnn functions that require a pointer to a number
+ptr(x,a)=eltype(a)[x]
 
 # alpha * src + beta * dest -> dest
 # Both beta and dest optional, beta=0 if not specified, dest is allocated with ones if not specified.
@@ -97,7 +99,7 @@ function cudnnActivationForward(src::Tensor, dest::Tensor=src; handle=cudnnHandl
     cudnnActivationForward(handle, mode, 
                            ptr(alpha,src), src.desc, src.data.ptr, 
                            ptr(beta,dest), dest.desc, dest.data.ptr)
-    return src
+    return dest
 end
 
 # Compute activation fn gradient.  The naming is a bit confusing.  In
