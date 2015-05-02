@@ -61,16 +61,16 @@
 	cudnnIm2Col
 	+ cudnnSoftmaxForward
 	+ cudnnSoftmaxBackward
-	cudnnCreatePoolingDescriptor
-	cudnnSetPooling2dDescriptor
-	cudnnGetPooling2dDescriptor
-	cudnnSetPoolingNdDescriptor
-	cudnnGetPoolingNdDescriptor
-	cudnnGetPoolingNdForwardOutputDim
-	cudnnGetPooling2dForwardOutputDim
-	cudnnDestroyPoolingDescriptor
-	cudnnPoolingForward
-	cudnnPoolingBackward
+	+ cudnnCreatePoolingDescriptor
+	- cudnnSetPooling2dDescriptor
+	- cudnnGetPooling2dDescriptor
+	+ cudnnSetPoolingNdDescriptor
+	+ cudnnGetPoolingNdDescriptor
+	? cudnnGetPoolingNdForwardOutputDim
+	- cudnnGetPooling2dForwardOutputDim
+	+ cudnnDestroyPoolingDescriptor
+	+ cudnnPoolingForward
+	+ cudnnPoolingBackward
 	+ cudnnActivationForward
 	+ cudnnActivationBackward
 
