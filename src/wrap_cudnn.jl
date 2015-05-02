@@ -1,7 +1,7 @@
 using Clang
 run(wrap_c.init(headers = ["/share/apps/cuDNN/cudnn-6.5-linux-x64-v2/cudnn.h"],
                 # index = None,
-                common_file="libcudnn_types.jl",
+                common_file="types.jl",
                 output_file="libcudnn.jl",
                 # output_dir = "",
                 # clang_args = ASCIIString[],
