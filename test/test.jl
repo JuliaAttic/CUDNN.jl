@@ -1,133 +1,137 @@
-using CUDArt
-using CUDNN
-using KUnet
+using Base.Test
 
-#x = reshape(Float64[1:21], (1,1,3,7))
-x = rand(1,1,4,5)
-ex = exp(x)
-sx = sum(ex,3)
-px = ex ./ sx
+# Comment this out if you don't want lots of messages:
+Base.Test.default_handler(r::Base.Test.Success) = info("$(r.expr)")
 
-y = CUDNN.Tensor(x)
-CUDNN.cudnnSoftmaxForward(y)
-@show maximum(abs(px - to_host(y)))
 
-dy = to_host(y)
-for j=1:size(dy,4)
-    #y1 = 0.5 / dy[1,1,1,j]
-    i=rand(1:size(dy,3))
-    y1 = 0.5 / dy[1,1,i,j]
-    dy[:,:,:,j] = y1
-    dy[:,:,i,j] = -y1
-end
-dy = CUDNN.Tensor(dy)
-dx = zeros(dy)
-CUDNN.cudnnSoftmaxBackward(y, dy, dx)
-dump(squeeze(to_host(y), (1,2)))
-dump(squeeze(to_host(dx), (1,2)))
-@show maximum(map(min, abs(to_host(y)-to_host(dx)), abs(to_host(y)-1.0-to_host(dx))))
-
-if false
-
-for n=3:8
-    @show n
-    try
-        dims = [(n+1):-1:2]
-        x = CUDNN.Tensor(rand(dims...))
-        y = CUDNN.Tensor(rand(dims...))
-        dx = CUDNN.Tensor(rand(dims...))
-        dy = CUDNN.Tensor(rand(dims...))
-        CUDNN.cudnnActivationBackward(CUDNN.CUDNN_ACTIVATION_RELU, y, dy, x, dx)
-        CUDNN.cudnnActivationForward(CUDNN.CUDNN_ACTIVATION_RELU, x)
-        CUDNN.cudnnScaleTensor(x, pi)
-        CUDNN.cudnnSetTensor(x, pi)
-        CUDNN.cudnnTransformTensor(2.0, x, 3.0, y)
-        bdim = ones(dims); bdim[1]=dims[1]; bdim[2]=dims[2]
-        bias = CUDNN.Tensor(rand(bdim...))
-        CUDNN.cudnnAddTensor(CUDNN.CUDNN_ADD_IMAGE, 1, bias, 1, x)
-    catch y
-        println(y)
+# See which operations support which dimensions:
+function testdims()
+    for n=3:8
+        @show n
+        try
+            dims = [(n+1):-1:2]
+            x = CUDNN.Tensor(rand(dims...))
+            y = CUDNN.Tensor(rand(dims...))
+            dx = CUDNN.Tensor(rand(dims...))
+            dy = CUDNN.Tensor(rand(dims...))
+            CUDNN.cudnnActivationBackward(CUDNN.CUDNN_ACTIVATION_RELU, y, dy, x, dx)
+            CUDNN.cudnnActivationForward(CUDNN.CUDNN_ACTIVATION_RELU, x)
+            CUDNN.cudnnScaleTensor(x, pi)
+            CUDNN.cudnnSetTensor(x, pi)
+            CUDNN.cudnnTransformTensor(2.0, x, 3.0, y)
+            bdim = ones(dims); bdim[1]=dims[1]; bdim[2]=dims[2]
+            bias = CUDNN.Tensor(rand(bdim...))
+            CUDNN.cudnnAddTensor(CUDNN.CUDNN_ADD_IMAGE, 1, bias, 1, x)
+        catch y
+            println(y)
+        end
     end
 end
 
 
-x = CUDNN.Tensor(rand(5,4,3,2))
-y = copy(x)
-CUDNN.cudnnActivationForward(CUDNN.CUDNN_ACTIVATION_RELU, y)
+using CUDNN: cudnnTensorDescriptor_t, cudnnCreateTensorDescriptor, cudnnSetTensor4dDescriptor, CUDNN_TENSOR_NCHW, CUDNN_DATA_DOUBLE, cudnnDataType_t, cudnnGetTensor4dDescriptor
+d = cudnnTensorDescriptor_t[0]
+cudnnCreateTensorDescriptor(d)
+cudnnSetTensor4dDescriptor(d[1], CUDNN_TENSOR_NCHW, CUDNN_DATA_DOUBLE, 2, 3, 4, 5)
+dt = cudnnDataType_t[0]
+for n in (:sn, :sc, :sh, :sw, :tn, :tc, :th, :tw); @eval $n = Cint[0]; end
+cudnnGetTensor4dDescriptor(d[1],dt,sn,sc,sh,sw,tn,tc,th,tw)
+@test (dt[1],sn[1],sc[1],sh[1],sw[1],tn[1],tc[1],th[1],tw[1]) == (CUDNN_DATA_DOUBLE, 2, 3, 4, 5, 60, 20, 5, 1)
 
-l1 = KUnet.Layer()
-y1 = to_host(x)
-KUnet.relu(l1,y1)
-@show isequal(y1,to_host(y))
 
-dy = CUDNN.Tensor(rand(5,4,3,2))
-dx = copy(dy)
-# x0h = to_host(x); x0h[1]=0; x0=CUDNN.Tensor(x0h)
-CUDNN.cudnnActivationBackward(CUDNN.CUDNN_ACTIVATION_RELU, y, dy, x, dx)
+using CUDNN: cudnnGetTensorNdDescriptor
+nd=4; nbDims=Cint[0]; dimA=Array(Cint,nd); strideA=Array(Cint,nd)
+cudnnGetTensorNdDescriptor(d[1],nd,dt,nbDims,dimA,strideA)
+@test (nbDims, dimA, strideA) == (Cint[4], Cint[2,3,4,5], Cint[60,20,5,1])
 
-dx1 = to_host(dy)
-KUnet.relu(l1,y1,dx1)
-@show isequal(dx1,to_host(dx))
 
-x = CUDNN.Tensor(ones(5,4,3,2))
-@show to_host(x)
-@show to_host(CUDNN.cudnnScaleTensor(x, pi))
+using CUDNN: Tensor, to_host
+x = rand(5,4,3,2)
+tx = Tensor(x)
+@test to_host(tx) == x
+@test cudnnGetTensorNdDescriptor(tx) == (CUDNN_DATA_DOUBLE, 4, [reverse(size(x))...], [reverse(strides(x))...])
 
-x = CUDNN.Tensor(rand(5,4,3,2))
-@show to_host(x)
-@show to_host(CUDNN.cudnnSetTensor(x, 7))
 
-src = CUDNN.Tensor(ones(5,4,3,2))
-bias = CUDNN.Tensor(ones(5,4,1,1))
-@show to_host(CUDNN.cudnnAddTensor(CUDNN.CUDNN_ADD_IMAGE, 1, bias, 1, src))
+using CUDNN: cudnnTransformTensor
+y = rand(5,4,3,2)
+ty = Tensor(y)
+@test to_host(cudnnTransformTensor(2, tx, 3, ty)) == 2x+3y
 
-tx = CUDNN.Tensor(ones(2,3,4,5))
-ty = CUDNN.Tensor(ones(2,3,4,5))
-CUDNN.cudnnTransformTensor(2.0, tx, 3.0, ty)
-@show to_host(ty)
 
-d = CUDNN.cudnnTensorDescriptor_t[0]
-CUDNN.cudnnCreateTensorDescriptor(d)
-CUDNN.cudnnSetTensor4dDescriptor(d[1], CUDNN.CUDNN_TENSOR_NCHW, CUDNN.CUDNN_DATA_FLOAT, 2,3,4,5)
-an=Cint[0]
-ac=Cint[0]
-ah=Cint[0]
-aw=Cint[0]
-anS=Cint[0]
-acS=Cint[0]
-ahS=Cint[0]
-awS=Cint[0]
-dt=typeof(CUDNN.CUDNN_DATA_FLOAT)[0]
-CUDNN.cudnnGetTensor4dDescriptor(d[1],dt,an,ac,ah,aw,anS,acS,ahS,awS)
-@show dt[1]
-@show an[1]
-@show ac[1]
-@show ah[1]
-@show aw[1]
-@show anS[1]
-@show acS[1]
-@show ahS[1]
-@show awS[1]
+using CUDNN: cudnnAddTensor, CUDNN_ADD_IMAGE
+b = rand(5,4,1,1)
+tb = Tensor(b)
+@test to_host(cudnnAddTensor(CUDNN_ADD_IMAGE, 1, tb, 1, tx)) == x .+ b
 
-nd=4
-nbDims=Cint[0]
-dimA=Array(Cint,nd)
-strideA=Array(Cint,nd)
-CUDNN.cudnnGetTensorNdDescriptor(d[1],nd,dt,nbDims,dimA,strideA)
-@show nbDims[1]
-@show dimA
-@show strideA
 
-a = rand(Float32, 5, 4, 3, 2)
-t = CUDNN.Tensor(a)
+using CUDNN: cudnnSetTensor
+@test to_host(cudnnSetTensor(tx, pi)) == fill!(ones(size(tx)), pi)
 
-CUDNN.cudnnGetTensorNdDescriptor(d[1],nd,dt,nbDims,dimA,strideA)
-@show nbDims[1]
-@show dimA
-@show strideA
 
-@show CUDNN.cudnnGetTensorNdDescriptor(t.desc)
+using CUDNN: cudnnScaleTensor
+x = rand(5,4,3,2)
+tx = Tensor(x)
+@test to_host(cudnnScaleTensor(tx, pi)) == x .* pi
 
-end
 
-:ok
+using CUDNN: cudnnActivationForward, CUDNN_ACTIVATION_RELU
+myrelu(x,y)=(copy!(y,x);for i=1:length(y); (y[i]<zero(y[i]))&&(y[i]=zero(y[i])); end; y)
+x = rand(5,4,3,2) - 0.5; tx = Tensor(x)
+y = zeros(5,4,3,2); ty = Tensor(y)
+@test to_host(cudnnActivationForward(tx, ty, mode=CUDNN_ACTIVATION_RELU)) == myrelu(x, y)
+
+using CUDNN: cudnnActivationBackward
+dy = (rand(5,4,3,2) - 0.5); tdy = Tensor(dy)
+dx = zeros(5,4,3,2); tdx = Tensor(dx)
+myrelu(y,dy,dx)=(copy!(dx,dy);for i=1:length(y); (y[i]==zero(y[i]))&&(dx[i]=zero(dx[i])); end; dx)
+@test to_host(cudnnActivationBackward(ty, tdy, tx, tdx, mode=CUDNN_ACTIVATION_RELU)) == myrelu(y,dy,dx)
+
+using CUDNN: CUDNN_ACTIVATION_SIGMOID
+mysigm(x,y)=(for i=1:length(y); y[i]=(1.0/(1.0+exp(-x[i]))); end; y)
+epseq(x,y)=(maximum(abs(x-y)) < 1e-15)
+x = rand(5,4,3,2) - 0.5; tx = Tensor(x)
+y = zeros(5,4,3,2); ty = Tensor(y)
+@test epseq(to_host(cudnnActivationForward(tx, ty, mode=CUDNN_ACTIVATION_SIGMOID)), mysigm(x, y))
+
+dy = (rand(5,4,3,2) - 0.5); tdy = Tensor(dy)
+dx = zeros(5,4,3,2); tdx = Tensor(dx)
+mysigm(y,dy,dx)=(for i=1:length(dx); dx[i]=dy[i]*y[i]*(1.0-y[i]); end; dx)
+@test epseq(to_host(cudnnActivationBackward(ty, tdy, tx, tdx, mode=CUDNN_ACTIVATION_SIGMOID)), mysigm(y,dy,dx))
+
+using CUDNN: CUDNN_ACTIVATION_TANH
+mytanh(x,y)=(for i=1:length(y); y[i]=tanh(x[i]); end; y)
+x = rand(5,4,3,2) - 0.5; tx = Tensor(x)
+y = zeros(5,4,3,2); ty = Tensor(y)
+@test epseq(to_host(cudnnActivationForward(tx, ty, mode=CUDNN_ACTIVATION_TANH)), mytanh(x, y))
+
+dy = (rand(5,4,3,2) - 0.5); tdy = Tensor(dy)
+dx = zeros(5,4,3,2); tdx = Tensor(dx)
+mytanh(y,dy,dx)=(for i=1:length(dx); dx[i]=dy[i]*(1.0+y[i])*(1.0-y[i]); end; dx)
+@test epseq(to_host(cudnnActivationBackward(ty, tdy, tx, tdx, mode=CUDNN_ACTIVATION_TANH)), mytanh(y,dy,dx))
+
+
+using CUDNN: cudnnSoftmaxForward
+x = (rand(1,1,4,5) - 0.5)       # 5 instances with 4 classes each
+tx = Tensor(x)
+ty = zeros(tx)
+@test epseq(to_host(cudnnSoftmaxForward(tx, ty)), exp(x)./sum(exp(x), 3))
+y = to_host(ty)
+
+using CUDNN: cudnnSoftmaxBackward
+# If y[c,j] is the probability of the correct answer for the j'th instance:
+# dy[c,j] = -1/y[c,j]
+# dy[i!=c,j] = 1/y[c,j]
+r = rand(1:size(y,3), size(y,4)) # Random answer key
+c = sub2ind((size(y,3),size(y,4)), r, 1:size(y,4)) # indices of correct answers
+p = y[c] # probabilities of correct answers
+dy = zeros(y)
+for i=1:size(dy,3); dy[:,:,i,:] = 1./p; end  # dy = 1/p for incorrect answers
+dy[c] *= -1.0 # dy = -1/p for correct answers
+dy *= 0.5  # this is a cudnn bug
+tdy = Tensor(dy)
+tdx = zeros(tdy)
+# We should have dx = y-1 for correct answers, dx = y for wrong answers
+dx = copy(y); dx[c] .-= 1
+@test epseq(to_host(cudnnSoftmaxBackward(ty, tdy, tdx)), dx)
+
+
