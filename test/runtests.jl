@@ -1,7 +1,7 @@
 using Base.Test
 
-# Comment this out if you don't want lots of messages:
-# Base.Test.default_handler(r::Base.Test.Success) = info("$(r.expr)")
+# Uncomment this if you want lots of messages:
+Base.Test.default_handler(r::Base.Test.Success) = info("$(r.expr)")
 
 # See which operations support which dimensions:
 function testdims()
@@ -86,7 +86,7 @@ myrelu(y,dy,dx)=(copy!(dx,dy);for i=1:length(y); (y[i]==zero(y[i]))&&(dx[i]=zero
 
 using CUDNN: CUDNN_ACTIVATION_SIGMOID
 mysigm(x,y)=(for i=1:length(y); y[i]=(1.0/(1.0+exp(-x[i]))); end; y)
-epseq(x,y)=(maximum(abs(x-y)) < 1e-15)
+epseq(x,y)=(maximum(abs(x-y)) < 1e-14)
 x = rand(5,4,3,2) - 0.5; tx = Tensor(x)
 y = zeros(5,4,3,2); ty = Tensor(y)
 @test epseq(to_host(cudnnActivationForward(tx, ty, mode=CUDNN_ACTIVATION_SIGMOID)), mysigm(x, y))
@@ -151,11 +151,79 @@ dx = copy(y); dx[c] .-= 1
 # dump(x)
 # dump(y)
 
-using CUDNN: PoolingDescriptor, free, CUDNN_POOLING_MAX, cudnnGetPoolingNdDescriptor
+using CUDNN: CUDNN_POOLING_MAX, CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING, CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING
+using CUDNN: PoolingDescriptor, free, cudnnGetPoolingNdDescriptor
 pd = PoolingDescriptor((3,3); padding=(2,2), stride=(1,1), mode=CUDNN_POOLING_MAX)
 @test cudnnGetPoolingNdDescriptor(pd) == (CUDNN_POOLING_MAX, length(pd.dims), pd.dims, pd.padding, pd.stride)
 # free(pd)
 
-# Test forward and backward:
+using CUDNN: cudnnPoolingForward, cudnnPoolingBackward
+x = reshape(Float64[1:20], 5, 4, 1, 1); tx = Tensor(x)
+
+# 1.0   6.0  11.0  16.0
+# 2.0   7.0  12.0  17.0
+# 3.0   8.0  13.0  18.0
+# 4.0   9.0  14.0  19.0
+# 5.0  10.0  15.0  20.0
+
+# 3 size, 0 pad, 1 stride
+ty1 = Tensor(zeros(3, 2, 1, 1))
+pd1 = PoolingDescriptor((3,3); padding=(0,0), stride=(1,1), mode=CUDNN_POOLING_MAX)
+@test squeeze(to_host(cudnnPoolingForward(pd1, tx, ty1)),(3,4)) == [13 18; 14 19; 15 20.]
+ty2 = Tensor(zeros(3, 2, 1, 1))
+pd2 = PoolingDescriptor((3,3); padding=(0,0), stride=(1,1), mode=CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING)
+@test squeeze(to_host(cudnnPoolingForward(pd2, tx, ty2)),(3,4)) == [7 12; 8 13; 9 14.]
+ty3 = Tensor(zeros(3, 2, 1, 1))
+pd3 = PoolingDescriptor((3,3); padding=(0,0), stride=(1,1), mode=CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING)
+@test squeeze(to_host(cudnnPoolingForward(pd3, tx, ty3)),(3,4)) == [7 12; 8 13; 9 14.]
+
+dy1 = reshape(Float64[1:6], 3, 2, 1, 1); 
+tdy1 = Tensor(dy1)
+tdx1 = zeros(tx)
+@test squeeze(to_host(cudnnPoolingBackward(pd1, ty1, tdy1, tx, tdx1)),(3,4)) == [0 0 0 0;0 0 0 0;0 0 1 4;0 0 2 5;0 0 3 6.]
+tdx2 = zeros(tx)
+@test epseq(squeeze(to_host(cudnnPoolingBackward(pd2, ty2, tdy1, tx, tdx2)),(3,4)), [1/9 5/9 5/9 4/9;3/9 12/9 12/9 9/9;6/9 21/9 21/9 15/9;5/9 16/9 16/9 11/9;3/9 9/9 9/9 6/9])
+tdx3 = zeros(tx)
+@test epseq(squeeze(to_host(cudnnPoolingBackward(pd3, ty3, tdy1, tx, tdx3)),(3,4)), [1/9 5/9 5/9 4/9;3/9 12/9 12/9 9/9;6/9 21/9 21/9 15/9;5/9 16/9 16/9 11/9;3/9 9/9 9/9 6/9])
+
+# 3 size, 1 pad, 1 stride
+ty4 = Tensor(zeros(5, 4, 1, 1))
+pd4 = PoolingDescriptor((3,3); padding=(1,1), stride=(1,1), mode=CUDNN_POOLING_MAX)
+@test squeeze(to_host(cudnnPoolingForward(pd4, tx, ty4)),(3,4)) == [7 12 17 17; 8 13 18 18; 9 14 19 19; 10 15 20 20; 10 15 20 20.]
+ty5 = Tensor(zeros(5, 4, 1, 1))
+pd5 = PoolingDescriptor((3,3); padding=(1,1), stride=(1,1), mode=CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING)
+@test squeeze(to_host(cudnnPoolingForward(pd5, tx, ty5)),(3,4)) == [16/9 39/9 69/9 56/9; 3 7 12 87/9; 33/9 8 13 93/9; 39/9 9 14 11; 28/9 57/9 87/9 68/9]
+# This is buggy in the library:
+ty6 = Tensor(zeros(5, 4, 1, 1))
+pd6 = PoolingDescriptor((3,3); padding=(1,1), stride=(1,1), mode=CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING)
+cudnnPoolingForward(pd6, tx, ty6)
+# @test squeeze(to_host(cudnnPoolingForward(pd6, tx, ty6)),(3,4)) == [16/4 39/6 69/6 56/4; 27/6 7 12 87/6; 33/6 8 13 93/6; 39/6 9 14 99/6; 28/4 57/6 87/6 68/4]
+# dump( squeeze(to_host(cudnnPoolingForward(pd6, tx, ty6)),(3,4)) )
+# dump( [16/4 39/6 69/6 56/4; 27/6 7 12 87/6; 33/6 8 13 93/6; 39/6 9 14 99/6; 28/4 57/6 87/6 68/4] )
+
+dy4 = reshape(Float64[1:20], 5, 4, 1, 1); 
+tdy4 = Tensor(dy4)
+tdx4 = zeros(tx)
+@test squeeze(to_host(cudnnPoolingBackward(pd4, ty4, tdy4, tx, tdx4)),(3,4)) == [0 0 0 0;0 1 6 11+16;0 2 7 12+17;0 3 8 13+18;0 4+5 9+10 14+15+19+20.]
+tdx5 = zeros(tx)
+@test epseq(squeeze(to_host(cudnnPoolingBackward(pd5, ty5, tdy4, tx, tdx5)),(3,4)), [16/9 39/9 69/9 56/9; 3 7 12 87/9; 33/9 8 13 93/9; 39/9 9 14 11; 28/9 57/9 87/9 68/9])
+tdx6 = zeros(tx)
+# Buggy fails test:
+cudnnPoolingBackward(pd6, ty6, tdy4, tx, tdx6)
+# @show (squeeze(to_host(cudnnPoolingBackward(pd6, ty6, tdy4, tx, tdx6)),(3,4)), [1/9 5/9 5/9 4/9;3/9 12/9 12/9 9/9;6/9 21/9 21/9 15/9;5/9 16/9 16/9 11/9;3/9 9/9 9/9 6/9])
+
+# 3 size, 1 pad, 2 stride
+ty7 = Tensor(zeros(3, 3, 1, 1))
+pd7 = PoolingDescriptor((3,3); padding=(1,1), stride=(2,2), mode=CUDNN_POOLING_MAX)
+@test squeeze(to_host(cudnnPoolingForward(pd7, tx, ty7)),(3,4)) == [7 17 17; 9 19 19; 10 20 20.]
+# Note below that if the window falls outside the padding, the denom can be less than 9!
+ty8 = Tensor(zeros(3, 3, 1, 1))
+pd8 = PoolingDescriptor((3,3); padding=(1,1), stride=(2,2), mode=CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING)
+@test squeeze(to_host(cudnnPoolingForward(pd8, tx, ty8)),(3,4)) == [16/9 69/9 33/6; 33/9 13 54/6; 28/9 87/9 39/6]
+# This is buggy in the library:
+# ty9 = Tensor(zeros(3, 3, 1, 1))
+# pd9 = PoolingDescriptor((3,3); padding=(1,1), stride=(2,2), mode=CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING)
+# dump( squeeze(to_host(cudnnPoolingForward(pd9, tx, ty9)),(3,4)) )
+# dump( [16/4 69/6 33/2; 33/6 13 54/3; 28/4 87/6 39/2] )
 
 :ok
