@@ -305,11 +305,26 @@ using CUDNN: cudnnGetConvolutionForwardWorkspaceSize
 
 using CUDNN: cudnnConvolutionForward
 x = reshape(Float64[1:20], 5, 4, 1, 1); tx = Tensor(x)
-y = reshape(Float64[1:4], 2, 2, 1, 1); ty = Filter(y)
-@test squeeze(to_host(cudnnConvolutionForward(tx, ty)),(3,4)) == [29 79 129; 39 89 139; 49 99 149; 59 109 159.]
+w = reshape(Float64[1:4], 2, 2, 1, 1); tw = Filter(w)
+@test squeeze(to_host(cudnnConvolutionForward(tx, tw)),(3,4)) == [29 79 129; 39 89 139; 49 99 149; 59 109 159.]
 
 using CUDNN: ConvolutionDescriptor, CUDNN_CROSS_CORRELATION
 cd = ConvolutionDescriptor(mode=CUDNN_CROSS_CORRELATION)
-@test squeeze(to_host(cudnnConvolutionForward(tx, ty; convDesc=cd)),(3,4)) == [51 101 151;61 111 161;71 121 171;81 131 181.]
+@test squeeze(to_host(cudnnConvolutionForward(tx, tw; convDesc=cd)),(3,4)) == [51 101 151;61 111 161;71 121 171;81 131 181.]
+
+using CUDNN: cudnnConvolutionBackwardBias, cudnnConvolutionBackwardFilter, cudnnConvolutionBackwardData
+x = rand(5,4,3,2); tx = Tensor(x)
+w = rand(2,2,3,4); tw = Filter(w)
+ty = cudnnConvolutionForward(tx, tw)
+dy = rand(size(ty)); tdy = Tensor(dy)
+db = map(i->sum(dy[:,:,i,:]), 1:size(dy,3))
+@test epseq(squeeze(to_host(cudnnConvolutionBackwardBias(tdy)),(1,2,4)), db)
+
+# TODO: put a more meaningful test here...
+tdx = zeros(tx)
+@test size(cudnnConvolutionBackwardData(tw, tdy, tdx)) == size(x)
+
+tdw = zeros(tw)
+@test size(cudnnConvolutionBackwardFilter(tx, tdy, tdw)) == size(w)
 
 :ok
