@@ -270,5 +270,46 @@ tx = Filter(x)
 @test to_host(tx) == x
 @test cudnnGetFilterNdDescriptor(tx) == (CUDNN_DATA_DOUBLE, 4, [reverse(size(x))...])
 
+# Convolution
+
+using CUDNN: ConvolutionDescriptor, cudnnGetConvolutionNdDescriptor, CUDNN_CONVOLUTION
+pd = ConvolutionDescriptor(padding=(0,0), stride=(1,1), upscale=(1,1), mode=CUDNN_CONVOLUTION)
+@test cudnnGetConvolutionNdDescriptor(pd) == (length(pd.padding), pd.padding, pd.stride, pd.upscale, pd.mode)
+# Note: upscale other than (1,1) gives unsupported error.
+# Note: not sure if we need to expose the ConvolutionDescriptor or just have options for convolution.
+# Note: need to understand upscale.  how often do we need non-default padding and stride?
+# Note: conv vs xcor
+
+using CUDNN: cudnnGetConvolutionNdForwardOutputDim
+@test cudnnGetConvolutionNdForwardOutputDim(Tensor(ones(12,8,3,6)), Filter(ones(5,4,3,2))) == (8,5,2,6)
+# Does not work for dimensions other than 4 yet:
+# @show cudnnGetConvolutionNdForwardOutputDim(Tensor(ones(13,12,11,3,10)), Filter(ones(6,5,4,3,2)))
+
+using CUDNN: CUDNN_CONVOLUTION_FWD_NO_WORKSPACE, CUDNN_CONVOLUTION_FWD_PREFER_FASTEST, CUDNN_CONVOLUTION_FWD_SPECIFY_WORKSPACE_LIMIT
+using CUDNN: CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM, CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM, CUDNN_CONVOLUTION_FWD_ALGO_GEMM, CUDNN_CONVOLUTION_FWD_ALGO_DIRECT
+
+using CUDNN: cudnnGetConvolutionForwardAlgorithm
+src = Tensor(ones(102,101,3,100))
+flt = Filter(ones(25,15,3,99))
+dst = Tensor(ones(cudnnGetConvolutionNdForwardOutputDim(src, flt)))
+@test cudnnGetConvolutionForwardAlgorithm(src, flt, dst; preference=CUDNN_CONVOLUTION_FWD_NO_WORKSPACE) == CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM
+@test cudnnGetConvolutionForwardAlgorithm(src, flt, dst; preference=CUDNN_CONVOLUTION_FWD_PREFER_FASTEST) == CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM
+@test cudnnGetConvolutionForwardAlgorithm(src, flt, dst; preference=CUDNN_CONVOLUTION_FWD_SPECIFY_WORKSPACE_LIMIT) == CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM
+
+using CUDNN: cudnnGetConvolutionForwardWorkspaceSize
+@test cudnnGetConvolutionForwardWorkspaceSize(src, flt, dst, CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM) == 0
+@test cudnnGetConvolutionForwardWorkspaceSize(src, flt, dst, CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM) == 4500 # size(flt,1)*size(flt,2)*size(flt,3)*sizeof(Cint)
+@test cudnnGetConvolutionForwardWorkspaceSize(src, flt, dst, CUDNN_CONVOLUTION_FWD_ALGO_GEMM) == 6107400000
+# Not supported yet:
+# @show cudnnGetConvolutionForwardWorkspaceSize(src, flt, dst, CUDNN_CONVOLUTION_FWD_ALGO_DIRECT)
+
+using CUDNN: cudnnConvolutionForward
+x = reshape(Float64[1:20], 5, 4, 1, 1); tx = Tensor(x)
+y = reshape(Float64[1:4], 2, 2, 1, 1); ty = Filter(y)
+@test squeeze(to_host(cudnnConvolutionForward(tx, ty)),(3,4)) == [29 79 129; 39 89 139; 49 99 149; 59 109 159.]
+
+using CUDNN: ConvolutionDescriptor, CUDNN_CROSS_CORRELATION
+cd = ConvolutionDescriptor(mode=CUDNN_CROSS_CORRELATION)
+@test squeeze(to_host(cudnnConvolutionForward(tx, ty; convDesc=cd)),(3,4)) == [51 101 151;61 111 161;71 121 171;81 131 181.]
 
 :ok
