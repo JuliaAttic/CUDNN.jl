@@ -27,6 +27,19 @@ function testdims()
     end
 end
 
+# Or rtfm:
+# The interface of cuDNN has been generalized so that data sets with other than two 
+# spatial dimensions (e.g., 1D or 3D data) can be supported in future releases.
+# o Note: while the interface now allows arbitrary N-dimensional tensors, most 
+# routines in this release remain limited to two spatial dimensions. This may 
+# be relaxed in future releases based on community feedback.
+# o As a BETA preview in this release, the convolution forward, convolution 
+# weight and data gradient, and cudnnSetTensor/cudnnScaleTensor routines 
+# now support 3D datasets through the “Nd” interface. Note, however, that 
+# these 3D routines have not yet been tuned for optimal performance. This will 
+# be improved in future releases.
+
+
 using CUDNN: cudnnTensorDescriptor_t, cudnnCreateTensorDescriptor, cudnnSetTensor4dDescriptor, CUDNN_TENSOR_NCHW, CUDNN_DATA_DOUBLE, cudnnDataType_t, cudnnGetTensor4dDescriptor
 d = cudnnTensorDescriptor_t[0]
 cudnnCreateTensorDescriptor(d)
@@ -225,5 +238,37 @@ pd8 = PoolingDescriptor((3,3); padding=(1,1), stride=(2,2), mode=CUDNN_POOLING_A
 # pd9 = PoolingDescriptor((3,3); padding=(1,1), stride=(2,2), mode=CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING)
 # dump( squeeze(to_host(cudnnPoolingForward(pd9, tx, ty9)),(3,4)) )
 # dump( [16/4 69/6 33/2; 33/6 13 54/3; 28/4 87/6 39/2] )
+
+# 3D pooling not supported:
+# x10 = reshape(Float64[1:60], 5, 4, 3, 1, 1); tx10 = Tensor(x10)
+# ty10 = Tensor(zeros(3, 2, 1, 1, 1))
+# pd10 = PoolingDescriptor((3,3,3); padding=(0,0,0), stride=(1,1,1), mode=CUDNN_POOLING_MAX)
+# @show cudnnPoolingForward(pd10, tx10, ty10)
+
+
+# Filters are basically the same as tensors:
+
+using CUDNN: cudnnFilterDescriptor_t, cudnnCreateFilterDescriptor, cudnnSetFilter4dDescriptor, CUDNN_TENSOR_NCHW, CUDNN_DATA_DOUBLE, cudnnDataType_t, cudnnGetFilter4dDescriptor
+d = cudnnFilterDescriptor_t[0]
+cudnnCreateFilterDescriptor(d)
+cudnnSetFilter4dDescriptor(d[1], CUDNN_DATA_DOUBLE, 2, 3, 4, 5)
+dt = cudnnDataType_t[0]
+for n in (:sk, :sc, :sh, :sw); @eval $n = Cint[0]; end
+cudnnGetFilter4dDescriptor(d[1],dt,sk,sc,sh,sw)
+@test (dt[1],sn[1],sc[1],sh[1],sw[1],tn[1],tc[1],th[1],tw[1]) == (CUDNN_DATA_DOUBLE, 2, 3, 4, 5, 60, 20, 5, 1)
+
+
+using CUDNN: cudnnGetFilterNdDescriptor
+nd=4; nbDims=Cint[0]; dimA=Array(Cint,nd)
+cudnnGetFilterNdDescriptor(d[1],nd,dt,nbDims,dimA)
+@test (nbDims, dimA) == (Cint[4], Cint[2,3,4,5])
+
+
+using CUDNN: Filter, to_host
+x = rand(5,4,3,2)
+tx = Filter(x)
+@test to_host(tx) == x
+@test cudnnGetFilterNdDescriptor(tx) == (CUDNN_DATA_DOUBLE, 4, [reverse(size(x))...])
+
 
 :ok
