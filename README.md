@@ -49,10 +49,18 @@ operations (to support 3-D point clouds) are under development.
 The default order of Tensor dimensions in Julia are (W,H,C,N) with W
 the being fastest changing dimension.  These stand for width, height,
 channels, and number of images for image applications.  Note that the
-C library documentation refers to this order as NCHW.  Similarly the
-default order of Filter dimensions in Julia are (W,H,C,K) standing for
-width, height, number of input feature maps, and number of output
-feature maps respectively.
+C library documentation refers to this order as NCHW because C is
+row-major.  Similarly the default order of Filter dimensions in Julia
+are (W,H,C,K) standing for width, height, number of input feature
+maps, and number of output feature maps respectively.
 
 The following array operations are supported for Tensors and Filters:
-`eltype`, `ndims`, size, strides, stride, zeros, ones, similar, copy.
+`eltype`, `ndims`, `size`, `strides`, `stride`, `zeros`, `ones`,
+`similar`, `copy`.  Also `to_host` from CUDArt can be used to retrieve
+the contents of a Tensor or Filter in a regular Julia array.
+
+## Functions
+
+`cudnnTransformTensor(alpha::Number, src::Tensor, beta::Number,
+dest::Tensor)` computes alpha * src + beta * dest and places the
+result in dest.
