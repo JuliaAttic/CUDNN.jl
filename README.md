@@ -24,11 +24,35 @@ We introduce two data types: Tensor and Filter.  Tensors and Filters
 are almost identical data structures except there is no stride option
 for the filter constructor.  CUDNN docs say "Filters layout must be
 contiguous in memory."  We introduce AbstractTensor as their parent
-for common operations, and employ CudaArray's for their data.
-
+for common operations, and employ
+[CudaArray](https://github.com/JuliaGPU/CUDArt.jl)'s for their data.
 ```
 abstract AbstractTensor
 immutable Tensor <: AbstractTensor; data::CudaArray; desc::cudnnTensorDescriptor_t; end
 immutable Filter <: AbstractTensor; data::CudaArray; desc::cudnnFilterDescriptor_t; end
 ```
 
+Tensors and Filters can be constructed using Array's, CudaArray's, or
+by specifying the element type and dimensions.
+```
+Tensor(T::Type, dims::Dims)
+Tensor(T::Type, dims::Integer...)
+Tensor(a::Array)
+Tensor(a::CudaArray)
+```
+
+Similar constructors also exist for Filters.  Currently only Float32
+and Float64 are supported for element types, and only 4-D Tensors and
+Filters are supported by the majority of CUDNN functions.  5-D Tensor
+operations (to support 3-D point clouds) are under development.
+
+The default order of Tensor dimensions in Julia are (W,H,C,N) with W
+the being fastest changing dimension.  These stand for width, height,
+channels, and number of images for image applications.  Note that the
+C library documentation refers to this order as NCHW.  Similarly the
+default order of Filter dimensions in Julia are (W,H,C,K) standing for
+width, height, number of input feature maps, and number of output
+feature maps respectively.
+
+The following array operations are supported for Tensors and Filters:
+`eltype`, `ndims`, size, strides, stride, zeros, ones, similar, copy.
