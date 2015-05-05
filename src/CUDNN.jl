@@ -17,6 +17,12 @@ atexit(()->cudnnDestroy(cudnnHandle))
 
 ### High level interface to CUDNN:
 
+# Tensors and Filters are almost identical data structures.  The cudnn
+# constructors are the same except there is no stride option for
+# filters.  Docs say "Filters layout must be contiguous in memory."
+# We introduce AbstractTensor for common operations, and employ
+# CudaArray's for their data.
+
 abstract AbstractTensor
 immutable Tensor <: AbstractTensor; data::CudaArray; desc::cudnnTensorDescriptor_t; end
 immutable Filter <: AbstractTensor; data::CudaArray; desc::cudnnFilterDescriptor_t; end
@@ -43,10 +49,6 @@ function tensordesc(a)
 end
 
 function filterdesc(a)
-    # A Filter is identical to a Tensor as a data structure.  The cudnn
-    # constructors are the same except there is no stride option for
-    # filters.  Docs say "Filters layout must be contiguous in memory."
-    # The difference should probably be eliminated.
     d = cudnnFilterDescriptor_t[0]
     cudnnCreateFilterDescriptor(d)
     cudnnSetFilterNdDescriptor(d[1], cudnntype(a), ndims(a), Cint[reverse(size(a))...])
@@ -61,17 +63,17 @@ end
 
 
 # Basic array functions on tensors
-# TODO: Some of these create unnecessary host arrays, need arrayless constructor.
+# TODO: Some of these create unnecessary host arrays.
 # TODO: Make these work with InplaceOps.jl
 Base.eltype(t::AbstractTensor)=eltype(t.data)
 Base.ndims(t::AbstractTensor)=ndims(t.data)
 Base.size(t::AbstractTensor)=size(t.data)
-Base.strides(t::AbstractTensor)=strides(to_host(t)) # CUDArt does not have strides?
+Base.strides(t::AbstractTensor)=strides(t.data)
 Base.size(t::AbstractTensor,n)=size(t.data,n)
 Base.stride(t::AbstractTensor,n)=stride(t.data,n)
 Base.zeros{T<:AbstractTensor}(t::T)=T(zeros(eltype(t), size(t)))
 Base.ones{T<:AbstractTensor}(t::T)=T(ones(eltype(t), size(t)))
-Base.similar{T<:AbstractTensor}(t::T)=T(Array(eltype(t), size(t)))
+Base.similar{T<:AbstractTensor}(t::T)=T(eltype(t), size(t))
 Base.copy{T<:AbstractTensor}(t::T)=T(to_host(t))
 
 # TODO: these should be available for Filters as well:
@@ -87,8 +89,8 @@ CUDArt.free(t::Filter)=(free(t.data); cudnnDestroyFilterDescriptor(t.desc))
 # This is missing from CUDArt:
 Base.strides(a::CudaArray)=map(i->stride(a,i), tuple(1:ndims(a)...))
 
-# For cudnn functions that require a pointer to a number
-ptr(x,a)=eltype(a)[x]
+# For low level cudnn functions that require a pointer to a number
+cptr(x,a)=eltype(a)[x]
 
 # Read the tensor descriptor (mostly for debugging)
 cudnnGetTensorNdDescriptor(t::Tensor)=cudnnGetTensorNdDescriptor(t.desc)
@@ -121,29 +123,29 @@ end
 
 function cudnnTransformTensor(alpha::Number, src::Tensor, beta::Number=0, dest::Tensor=ones(src); handle=cudnnHandle)
     cudnnTransformTensor(handle, 
-                         ptr(alpha,src), src.desc, src.data.ptr, 
-                         ptr(beta,dest), dest.desc, dest.data.ptr)
+                         cptr(alpha,src), src.desc, src.data.ptr, 
+                         cptr(beta,dest), dest.desc, dest.data.ptr)
     return dest
 end
 
 # Refer to cudnn doc to see what different add modes do
 
 function cudnnAddTensor(mode::cudnnAddMode_t, alpha::Number, bias::Tensor, beta::Number, src::Tensor; handle=cudnnHandle)
-    cudnnAddTensor(handle, mode, ptr(alpha,bias), bias.desc, bias.data.ptr, ptr(beta,src), src.desc, src.data.ptr)
+    cudnnAddTensor(handle, mode, cptr(alpha,bias), bias.desc, bias.data.ptr, cptr(beta,src), src.desc, src.data.ptr)
     return src
 end
 
 # src .= value
 
 function cudnnSetTensor(src::Tensor, value::Number; handle=cudnnHandle)
-    cudnnSetTensor(handle, src.desc, src.data.ptr, ptr(value,src))
+    cudnnSetTensor(handle, src.desc, src.data.ptr, cptr(value,src))
     return src
 end
 
 # src .*= alpha
 
 function cudnnScaleTensor(src::Tensor, alpha::Number; handle=cudnnHandle)
-    cudnnScaleTensor(handle, src.desc, src.data.ptr, ptr(alpha,src))
+    cudnnScaleTensor(handle, src.desc, src.data.ptr, cptr(alpha,src))
     return src
 end
 
@@ -153,8 +155,8 @@ end
 function cudnnActivationForward(src::Tensor, dest::Tensor=src; handle=cudnnHandle, 
                                 mode=CUDNN_ACTIVATION_RELU, alpha=1.0, beta=0.0)
     cudnnActivationForward(handle, mode, 
-                           ptr(alpha,src), src.desc, src.data.ptr, 
-                           ptr(beta,dest), dest.desc, dest.data.ptr)
+                           cptr(alpha,src), src.desc, src.data.ptr, 
+                           cptr(beta,dest), dest.desc, dest.data.ptr)
     return dest
 end
 
@@ -168,10 +170,10 @@ end
 function cudnnActivationBackward(src::Tensor, srcDiff::Tensor, dest::Tensor, destDiff::Tensor=srcDiff; 
                                  handle=cudnnHandle, mode=CUDNN_ACTIVATION_RELU, alpha=1.0, beta=0.0) 
     cudnnActivationBackward(handle, mode, 
-                            ptr(alpha,src), src.desc, src.data.ptr, 
+                            cptr(alpha,src), src.desc, src.data.ptr, 
                             srcDiff.desc, srcDiff.data.ptr, 
                             dest.desc, dest.data.ptr,
-                            ptr(beta,destDiff), destDiff.desc, destDiff.data.ptr)
+                            cptr(beta,destDiff), destDiff.desc, destDiff.data.ptr)
     return destDiff
 end
 
@@ -197,8 +199,8 @@ function cudnnSoftmaxForward(src::Tensor, dest::Tensor=src;
                              mode=CUDNN_SOFTMAX_MODE_INSTANCE, # or CUDNN_SOFTMAX_MODE_CHANNEL
                              alpha=1.0, beta=0.0)
     cudnnSoftmaxForward(handle, algorithm, mode,
-                        ptr(alpha, src), src.desc, src.data.ptr,
-                        ptr(beta, dest), dest.desc, dest.data.ptr)
+                        cptr(alpha, src), src.desc, src.data.ptr,
+                        cptr(beta, dest), dest.desc, dest.data.ptr)
     return dest
 end
 
@@ -233,9 +235,9 @@ function cudnnSoftmaxBackward(src::Tensor, srcDiff::Tensor, destDiff::Tensor=src
                               mode=CUDNN_SOFTMAX_MODE_INSTANCE, # or CUDNN_SOFTMAX_MODE_CHANNEL
                               alpha=1.0, beta=0.0)
     cudnnSoftmaxBackward(handle, algorithm, mode,
-                         ptr(alpha, src), src.desc, src.data.ptr,
+                         cptr(alpha, src), src.desc, src.data.ptr,
                          srcDiff.desc, srcDiff.data,
-                         ptr(beta, destDiff), destDiff.desc, destDiff.data.ptr)
+                         cptr(beta, destDiff), destDiff.desc, destDiff.data.ptr)
     return destDiff
 end
 
@@ -285,8 +287,8 @@ CUDArt.free(pd::PoolingDescriptor)=cudnnDestroyPoolingDescriptor(pd.ptr)
 function cudnnPoolingForward(pd::PoolingDescriptor, src::Tensor, dest::Tensor; 
                              handle=cudnnHandle, alpha=1.0, beta=0.0)
     cudnnPoolingForward(handle, pd.ptr, 
-                        ptr(alpha,src), src.desc, src.data.ptr,
-                        ptr(beta,dest), dest.desc, dest.data.ptr)
+                        cptr(alpha,src), src.desc, src.data.ptr,
+                        cptr(beta,dest), dest.desc, dest.data.ptr)
     return dest
 end
                              
@@ -317,10 +319,10 @@ end
 function cudnnPoolingBackward(pd::PoolingDescriptor, src::Tensor, srcDiff::Tensor, dest::Tensor, destDiff::Tensor; 
                               handle=cudnnHandle, alpha=1.0, beta=0.0)
     cudnnPoolingBackward(handle, pd.ptr, 
-                         ptr(alpha,src), src.desc, src.data.ptr, 
+                         cptr(alpha,src), src.desc, src.data.ptr, 
                          srcDiff.desc, srcDiff.data.ptr, 
                          dest.desc, dest.data.ptr,
-                         ptr(beta,destDiff), destDiff.desc, destDiff.data.ptr)
+                         cptr(beta,destDiff), destDiff.desc, destDiff.data.ptr)
     return destDiff
 end
 
@@ -435,11 +437,50 @@ function cudnnConvolutionForward(src::Tensor, filter::Filter, dest=nothing;
         workSpace = CudaArray(Int8, workSpaceSizeInBytes)
     end
     cudnnConvolutionForward(handle,
-                            ptr(alpha,src),src.desc,src.data.ptr,
+                            cptr(alpha,src),src.desc,src.data.ptr,
                             filter.desc,filter.data.ptr,
                             convDesc.ptr,algo,workSpace.ptr,workSpaceSizeInBytes,
-                            ptr(beta,dest),dest.desc,dest.data)
+                            cptr(beta,dest),dest.desc,dest.data)
     return dest
+end
+
+# n=h=w=1 for dest and c same as input.  CUDNN seems to assume a
+# single scalar bias per output channel, i.e. the same number is added
+# to every image and every pixel on the same output channel.  Say our
+# input was x, we convolved it going forward with w, added bias b, and
+# got tensor y as a result.  i.e. y=w*x+b where * means convolution
+# and + means broadcasting addition. Now we get dJ/dy=src, and we want
+# dJ/db=dest.  Well, we simply need to add up all dy where a
+# particular b was added to get db.  This means dest is just the sum
+# of src entries for every channel.
+function cudnnConvolutionBackwardBias(src::Tensor, dest::Tensor=Tensor(eltype(src),(1,1,size(src,3),1));
+                                      handle=cudnnHandle, alpha=1.0, beta=0.0)
+    cudnnConvolutionBackwardBias(handle,cptr(alpha,src),src.desc,src.data.ptr,cptr(beta,dest),dest.desc,dest.data.ptr)
+    return dest
+end
+
+# I am guessing if y=w*x+b going forward, the arguments below
+# correspond to src=x, diff=dy, grad=dw.
+function cudnnConvolutionBackwardFilter(src::Tensor, diff::Tensor, grad::Filter;
+                                        handle=cudnnHandle, alpha=1.0, beta=0.0, 
+                                        convDesc=defaultConvolutionDescriptor)
+    cudnnConvolutionBackwardFilter(handle,
+                                   cptr(alpha,src),src.desc,src.data.ptr,
+                                   diff.desc,diff.data.ptr,convDesc.ptr,
+                                   cptr(beta,grad),grad.desc,grad.data.ptr)
+    return grad
+end
+
+# I am guessing if y=w*x+b going forward, the arguments below
+# correspond to filter=w, diff=dy, grad=dx.
+function cudnnConvolutionBackwardData(filter::Filter, diff::Tensor, grad::Tensor;
+                                      handle=cudnnHandle, alpha=1.0, beta=0.0, 
+                                      convDesc=defaultConvolutionDescriptor)
+    cudnnConvolutionBackwardData(handle,cptr(alpha,diff),
+                                 filter.desc,filter.data.ptr,
+                                 diff.desc,diff.data.ptr,convDesc.ptr,
+                                 cptr(beta,grad),grad.desc,grad.data.ptr)
+    return grad
 end
 
 end # module
