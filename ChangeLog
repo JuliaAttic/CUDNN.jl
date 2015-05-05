@@ -38,27 +38,27 @@
 	+ cudnnAddTensor
 	+ cudnnSetTensor
 	+ cudnnScaleTensor
-	cudnnCreateFilterDescriptor
-	cudnnSetFilter4dDescriptor
-	cudnnGetFilter4dDescriptor
-	cudnnSetFilterNdDescriptor
-	cudnnGetFilterNdDescriptor
-	cudnnDestroyFilterDescriptor
-	cudnnCreateConvolutionDescriptor
-	cudnnSetConvolution2dDescriptor
-	cudnnGetConvolution2dDescriptor
-	cudnnGetConvolution2dForwardOutputDim
-	cudnnSetConvolutionNdDescriptor
-	cudnnGetConvolutionNdDescriptor
-	cudnnGetConvolutionNdForwardOutputDim
-	cudnnDestroyConvolutionDescriptor
-	cudnnGetConvolutionForwardAlgorithm
-	cudnnGetConvolutionForwardWorkspaceSize
-	cudnnConvolutionForward
-	cudnnConvolutionBackwardBias
-	cudnnConvolutionBackwardFilter
-	cudnnConvolutionBackwardData
-	cudnnIm2Col
+	+ cudnnCreateFilterDescriptor
+	- cudnnSetFilter4dDescriptor
+	- cudnnGetFilter4dDescriptor
+	+ cudnnSetFilterNdDescriptor
+	+ cudnnGetFilterNdDescriptor
+	+ cudnnDestroyFilterDescriptor
+	+ cudnnCreateConvolutionDescriptor
+	- cudnnSetConvolution2dDescriptor
+	- cudnnGetConvolution2dDescriptor
+	- cudnnGetConvolution2dForwardOutputDim
+	+ cudnnSetConvolutionNdDescriptor
+	+ cudnnGetConvolutionNdDescriptor
+	+ cudnnGetConvolutionNdForwardOutputDim
+	+ cudnnDestroyConvolutionDescriptor
+	- cudnnGetConvolutionForwardAlgorithm
+	- cudnnGetConvolutionForwardWorkspaceSize
+	+ cudnnConvolutionForward
+	+ cudnnConvolutionBackwardBias
+	+ cudnnConvolutionBackwardFilter
+	+ cudnnConvolutionBackwardData
+	- cudnnIm2Col
 	+ cudnnSoftmaxForward
 	+ cudnnSoftmaxBackward
 	+ cudnnCreatePoolingDescriptor
