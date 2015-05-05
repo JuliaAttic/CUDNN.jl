@@ -61,6 +61,28 @@ the contents of a Tensor or Filter in a regular Julia array.
 
 ## Functions
 
+I kept the original names from the C library and provided (hopefully)
+more convenient type signatures.
+
 `cudnnTransformTensor(alpha::Number, src::Tensor, beta::Number,
 dest::Tensor)` computes alpha * src + beta * dest and places the
-result in dest.
+result in dest.  Both beta and dest are optional and are set to 0 and
+ones(src) respectively if not specified.
+
+`cudnnAddTensor(mode::cudnnAddMode_t, alpha::Number, bias::Tensor,
+beta::Number, src::Tensor)` please refer to the C library
+documentation to see what different add modes do.
+
+`cudnnSetTensor(src::Tensor, value::Number)` sets each element of the
+src Tensor to value.
+
+`cudnnScaleTensor(src::Tensor, alpha::Number)` scales each element of
+the src Tensor with alpha.
+
+`cudnnActivationForward(src::Tensor, [dest::Tensor])` applies a neural
+network activation function (relu by default) to src and writes the
+result to dest.  dest is optional and the operation is performed
+in-place on src if dest is not specified.  The type of activation
+function can be specified using the `mode` keyword argument.
+Currently supported modes are `CUDNN_ACTIVATION_RELU`,
+`CUDNN_ACTIVATION_SIGMOID`, `CUDNN_ACTIVATION_TANH`.
