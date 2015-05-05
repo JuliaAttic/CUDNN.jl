@@ -85,4 +85,38 @@ result to dest.  dest is optional and the operation is performed
 in-place on src if dest is not specified.  The type of activation
 function can be specified using the `mode` keyword argument.
 Currently supported modes are `CUDNN_ACTIVATION_RELU`,
-`CUDNN_ACTIVATION_SIGMOID`, `CUDNN_ACTIVATION_TANH`.
+`CUDNN_ACTIVATION_SIGMOID`, and `CUDNN_ACTIVATION_TANH`.
+
+`cudnnActivationBackward(src::Tensor, srcDiff::Tensor, dest::Tensor,
+[destDiff::Tensor])` computes the loss gradient of the input to the
+activation function from the gradient of the output of the activation
+function.  If y=f(x) where f is the forward activation function and J
+is loss, the arguments would be src=y, srcDiff=dJ/dy, dest=x, and
+destDiff=dJ/dx.  destDiff is optional, srcDiff will be overwritten if
+destDiff is not specified.
+
+`cudnnSoftmaxForward(src::Tensor, [dest::Tensor])`
+
+`cudnnSoftmaxBackward(src::Tensor, srcDiff::Tensor, [destDiff::Tensor])`
+
+
+# Convolution
+
+`cudnnConvolutionForward(src::Tensor, filter::Filter, [dest::Tensor])`
+
+`cudnnConvolutionBackwardBias(src::Tensor, [dest::Tensor])`
+
+`cudnnConvolutionBackwardFilter(src::Tensor, diff::Tensor, grad::Filter)`
+
+`cudnnConvolutionBackwardData(filter::Filter, diff::Tensor, grad::Tensor)`
+
+
+# Pooling
+
+`PoolingDescriptor`
+
+`cudnnPoolingForward(pd::PoolingDescriptor, src::Tensor, dest::Tensor)`
+
+`cudnnPoolingBackward(pd::PoolingDescriptor, src::Tensor, srcDiff::Tensor, dest::Tensor, destDiff::Tensor)`
+
+
