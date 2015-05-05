@@ -8,7 +8,7 @@ isempty(libcudnn) && error("CUDNN library cannot be found")
 include("types.jl")
 include("libcudnn.jl")
 
-# Setup cudnn handle
+# Setup default cudnn handle
 cudnnHandlePtr = cudnnHandle_t[0]
 cudnnCreate(cudnnHandlePtr)
 cudnnHandle = cudnnHandlePtr[1]
@@ -17,50 +17,50 @@ atexit(()->cudnnDestroy(cudnnHandle))
 
 ### High level interface to CUDNN:
 
-# Datatypes: AbstractTensor, Tensor, Filter, PoolingDescription
-
 abstract AbstractTensor
+immutable Tensor <: AbstractTensor; data::CudaArray; desc::cudnnTensorDescriptor_t; end
+immutable Filter <: AbstractTensor; data::CudaArray; desc::cudnnFilterDescriptor_t; end
 
-immutable Tensor <: AbstractTensor
-    data::CudaArray
-    desc::cudnnTensorDescriptor_t
-    # TODO: maybe have a constructor that takes dims only
-    function Tensor(a::Array)
-        dt = (eltype(a) == Float64 ? CUDNN_DATA_DOUBLE :
-              eltype(a) == Float32 ? CUDNN_DATA_FLOAT :
-              error("Supported data types are Float32 and Float64"))
-        c = CudaArray(a)
-        d = cudnnTensorDescriptor_t[0]
-        # TODO: We should make sure this gets deallocated properly:
-        cudnnCreateTensorDescriptor(d)
-        # Default order in CUDNN is n,c,h,w with w fastest changing
-        # Default order in Julia is a[w,h,c,n] with w fastest changing
-        # I think the reverse below gives what CUDNN expects
-        cudnnSetTensorNdDescriptor(d[1], dt, ndims(a), Cint[reverse(size(a))...], Cint[reverse(strides(a))...])
-        new(c, d[1])
-    end
+Tensor(a::CudaArray)=Tensor(a, tensordesc(a))
+Tensor(T::Type, dims::Dims)=Tensor(CudaArray(T, dims))
+Tensor(T::Type, dims::Integer...)=Tensor(T, dims)
+Tensor(a::Array)=Tensor(CudaArray(a))
+
+Filter(a::CudaArray)=Filter(a, filterdesc(a))
+Filter(T::Type, dims::Dims)=Filter(CudaArray(T, dims))
+Filter(T::Type, dims::Integer...)=Filter(T, dims)
+Filter(a::Array)=Filter(CudaArray(a))
+
+function tensordesc(a)
+    # TODO: We should make sure this gets deallocated properly:
+    d = cudnnTensorDescriptor_t[0]
+    cudnnCreateTensorDescriptor(d)
+    # Default order in CUDNN is n,c,h,w with w fastest changing
+    # Default order in Julia is a[w,h,c,n] with w fastest changing
+    # I think the reverse below gives what CUDNN expects
+    cudnnSetTensorNdDescriptor(d[1], cudnntype(a), ndims(a), Cint[reverse(size(a))...], Cint[reverse(strides(a))...])
+    return d[1]
 end
 
-# A Filter is identical to a Tensor as a data structure.  The cudnn
-# constructors are the same except there is no stride option for
-# filters.  Docs say "Filters layout must be contiguous in memory."
-
-immutable Filter <: AbstractTensor
-    data::CudaArray
-    desc::cudnnFilterDescriptor_t
-    function Filter(a::Array)
-        dt = (eltype(a) == Float64 ? CUDNN_DATA_DOUBLE :
-              eltype(a) == Float32 ? CUDNN_DATA_FLOAT :
-              error("Supported data types are Float32 and Float64"))
-        c = CudaArray(a)
-        d = cudnnFilterDescriptor_t[0]
-        cudnnCreateFilterDescriptor(d)
-        cudnnSetFilterNdDescriptor(d[1], dt, ndims(a), Cint[reverse(size(a))...])
-        new(c, d[1])
-    end
+function filterdesc(a)
+    # A Filter is identical to a Tensor as a data structure.  The cudnn
+    # constructors are the same except there is no stride option for
+    # filters.  Docs say "Filters layout must be contiguous in memory."
+    # The difference should probably be eliminated.
+    d = cudnnFilterDescriptor_t[0]
+    cudnnCreateFilterDescriptor(d)
+    cudnnSetFilterNdDescriptor(d[1], cudnntype(a), ndims(a), Cint[reverse(size(a))...])
+    return d[1]
 end
 
-# Basic array functions
+function cudnntype(a)
+    (eltype(a) == Float64 ? CUDNN_DATA_DOUBLE :
+     eltype(a) == Float32 ? CUDNN_DATA_FLOAT :
+     error("Supported data types are Float32 and Float64"))
+end
+
+
+# Basic array functions on tensors
 # TODO: Some of these create unnecessary host arrays, need arrayless constructor.
 # TODO: Make these work with InplaceOps.jl
 Base.eltype(t::AbstractTensor)=eltype(t.data)
@@ -73,6 +73,7 @@ Base.zeros{T<:AbstractTensor}(t::T)=T(zeros(eltype(t), size(t)))
 Base.ones{T<:AbstractTensor}(t::T)=T(ones(eltype(t), size(t)))
 Base.similar{T<:AbstractTensor}(t::T)=T(Array(eltype(t), size(t)))
 Base.copy{T<:AbstractTensor}(t::T)=T(to_host(t))
+
 # TODO: these should be available for Filters as well:
 Base.copy!(dest::Tensor,src::Tensor)=cudnnTransformTensor(1, src, 0, dest)
 Base.fill!(src::Tensor,value::Number)=cudnnSetTensor(src,value)
@@ -82,6 +83,12 @@ Base.scale!(src::Tensor, alpha::Number)=cudnnScaleTensor(src,alpha)
 CUDArt.to_host(t::AbstractTensor)=to_host(t.data)
 CUDArt.free(t::Tensor)=(free(t.data); cudnnDestroyTensorDescriptor(t.desc))
 CUDArt.free(t::Filter)=(free(t.data); cudnnDestroyFilterDescriptor(t.desc))
+
+# This is missing from CUDArt:
+Base.strides(a::CudaArray)=map(i->stride(a,i), tuple(1:ndims(a)...))
+
+# For cudnn functions that require a pointer to a number
+ptr(x,a)=eltype(a)[x]
 
 # Read the tensor descriptor (mostly for debugging)
 cudnnGetTensorNdDescriptor(t::Tensor)=cudnnGetTensorNdDescriptor(t.desc)
@@ -105,9 +112,6 @@ function cudnnGetFilterNdDescriptor(td::cudnnFilterDescriptor_t, nbDimsRequested
     return (dataType[1], nbDims[1], dimA[1:nbDims[1]])
     # nbDimsRequested > 8 gives error
 end
-
-# For cudnn functions that require a pointer to a number
-ptr(x,a)=eltype(a)[x]
 
 # alpha * src + beta * dest -> dest
 # Both beta and dest optional, beta=0 if not specified, dest is allocated with ones if not specified.
@@ -321,5 +325,122 @@ function cudnnPoolingBackward(pd::PoolingDescriptor, src::Tensor, srcDiff::Tenso
 end
 
 
+immutable ConvolutionDescriptor; padding; stride; upscale; mode; ptr;
+    function ConvolutionDescriptor(; dims=2, padding=zeros(Cint,dims), stride=ones(padding), upscale=ones(padding), mode=CUDNN_CONVOLUTION)
+        @assert in(mode, (CUDNN_CONVOLUTION, CUDNN_CROSS_CORRELATION))
+        @assert length(padding) == length(stride) == length(upscale)
+        cd = Array(cudnnConvolutionDescriptor_t, 1)
+        cudnnCreateConvolutionDescriptor(cd)
+        cudnnSetConvolutionNdDescriptor(cd[1],length(padding),Cint[padding...],Cint[stride...],Cint[upscale...],mode)
+        new(padding, stride, upscale, mode, cd[1])
+    end
+end
+
+CUDArt.free(cd::ConvolutionDescriptor)=cudnnDestroyConvolutionDescriptor(cd.ptr)
+
+# Read info from gpu for debugging
+function cudnnGetConvolutionNdDescriptor(cd::ConvolutionDescriptor)
+    nd = length(cd.padding)
+    n = Cint[0]
+    p = Array(Cint, nd)
+    s = Array(Cint, nd)
+    u = Array(Cint, nd)
+    m = cudnnConvolutionMode_t[0]
+    cudnnGetConvolutionNdDescriptor(cd.ptr, nd, n, p, s, u, m)
+    inttuple(x)=tuple(Int[x...]...)
+    (n[1], inttuple(p), inttuple(s), inttuple(u), m[1])
+end
+
+const defaultConvolutionDescriptor = ConvolutionDescriptor()
+
+# This function returns the dimensions of the resulting n-D tensor of a nbDims-2-D
+# convolution, given the convolution descriptor, the input tensor descriptor and the filter
+# descriptor This function can help to setup the output tensor and allocate the proper
+# amount of memory prior to launch the actual convolution.
+# Each dimension of the (nbDims-2)-D images of the output tensor is computed as
+# followed:
+#  outputDim = 1 + (inputDim + 2*pad - filterDim)/convolutionStride;
+
+function cudnnGetConvolutionNdForwardOutputDim(t::Tensor, f::Filter; convDesc=defaultConvolutionDescriptor)
+    nbDims = ndims(t)
+    outputDim = Array(Cint, nbDims)
+    cudnnGetConvolutionNdForwardOutputDim(convDesc.ptr, t.desc, f.desc, nbDims, outputDim)
+    tuple(Int[reverse(outputDim)...]...)
+end
+
+# These are related to convolution algorithm selection:
+# cudnnGetConvolutionForwardAlgorithm
+# cudnnGetConvolutionForwardWorkspaceSize
+#
+# From the v2 release notes it seems like IMPLICIT_PRECOMP_GEMM is a
+# good default especially with our memory limitations.
+#
+# Forward convolution is now implemented via several different algorithms, and 
+# the interface allows the application to choose one of these algorithms specifically 
+# or to specify a strategy (e.g., prefer fastest, use no additional working space) by 
+# which the library should select the best algorithm automatically. The four 
+# algorithms currently given are as follows:
+# o IMPLICIT_GEMM corresponds to the sole algorithm that was provided in 
+# cuDNN Release 1; it is the only algorithm that supports all input sizes while 
+# using no additional working space.
+# o IMPLICIT_PRECOMP_GEMM is a modification of this approach that uses a 
+# small amount of working space (specifically, C*R*S*sizeof(int) bytes, 
+# where C is the number of input feature maps and R and S are the filter height 
+# and width, respectively, for the case of 2D convolutions) to achieve 
+# significantly higher performance in most cases. This algorithm achieves its 
+# highest performance when zero-padding is not used.
+# o GEMM is an “im2col”-based approach, explicitly expanding the input data 
+# in memory and then using an otherwise-pure matrix multiplication that 
+# obeys cuDNN’s input and output stridings, avoiding a separate transposition 
+# step on the input or output. Note that this algorithm requires significant
+# working space, though it may be faster than either of the two “implicit 
+# GEMM” approaches in some cases. As such, the PREFER_FASTEST
+# forward convolution algorithm preference may sometimes recommend this 
+# approach. When memory should be used more sparingly, 
+# SPECIFY_WORKSPACE_LIMIT can be used instead of PREFER_FASTEST
+# to ensure that the algorithm recommended will not require more than a given 
+# amount of working space.
+# o DIRECT is a placeholder for a future implementation of direct convolution.
+
+function cudnnGetConvolutionForwardAlgorithm(src::Tensor, filter::Filter, dest::Tensor; 
+                                             handle=cudnnHandle,
+                                             convDesc=defaultConvolutionDescriptor,
+                                             preference=CUDNN_CONVOLUTION_FWD_PREFER_FASTEST,
+                                             memoryLimitInbytes=int(5e9))
+    algo = cudnnConvolutionFwdAlgo_t[0]
+    cudnnGetConvolutionForwardAlgorithm(handle,src.desc,filter.desc,convDesc.ptr,dest.desc,preference,memoryLimitInbytes,algo)
+    return algo[1]
+end
+
+function cudnnGetConvolutionForwardWorkspaceSize(src::Tensor, filter::Filter, dest::Tensor, algo::cudnnConvolutionFwdAlgo_t;
+                                                 handle=cudnnHandle, convDesc=defaultConvolutionDescriptor)
+    sizeInBytes = Csize_t[0]
+    cudnnGetConvolutionForwardWorkspaceSize(handle,src.desc,filter.desc,convDesc.ptr,dest.desc,algo,sizeInBytes)
+    return int(sizeInBytes[1])
+end
+
+function cudnnConvolutionForward(src::Tensor, filter::Filter, dest=nothing;
+                                 handle=cudnnHandle, alpha=1.0, beta=0.0, 
+                                 convDesc=defaultConvolutionDescriptor,
+                                 algo=CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM,
+                                 workSpace=nothing, workSpaceSizeInBytes=0)
+    @assert eltype(filter) == eltype(src)
+    osize = cudnnGetConvolutionNdForwardOutputDim(src,filter;convDesc=convDesc)
+    (dest == nothing) && (dest = Tensor(eltype(src), osize))
+    @assert osize == size(dest)
+    @assert eltype(dest) == eltype(src)
+    wsize = cudnnGetConvolutionForwardWorkspaceSize(src, filter, dest, algo)
+    if (workSpace == nothing || workSpaceSizeInBytes < wsize)
+        workSpaceSizeInBytes = wsize
+        workSpace = CudaArray(Int8, workSpaceSizeInBytes)
+    end
+    cudnnConvolutionForward(handle,
+                            ptr(alpha,src),src.desc,src.data.ptr,
+                            filter.desc,filter.data.ptr,
+                            convDesc.ptr,algo,workSpace.ptr,workSpaceSizeInBytes,
+                            ptr(beta,dest),dest.desc,dest.data)
+    return dest
+end
 
 end # module
+
