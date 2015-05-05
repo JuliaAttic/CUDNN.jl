@@ -483,5 +483,13 @@ function cudnnConvolutionBackwardData(filter::Filter, diff::Tensor, grad::Tensor
     return grad
 end
 
+
+export Tensor, Filter
+export cudnnTransformTensor, cudnnAddTensor, cudnnSetTensor, cudnnScaleTensor
+export cudnnActivationForward, cudnnActivationBackward
+export cudnnSoftmaxForward, cudnnSoftmaxBackward
+export PoolingDescriptor, cudnnPoolingForward, cudnnPoolingBackward
+export cudnnConvolutionForward, cudnnConvolutionBackwardBias, cudnnConvolutionBackwardFilter, cudnnConvolutionBackwardData
+
 end # module
 
