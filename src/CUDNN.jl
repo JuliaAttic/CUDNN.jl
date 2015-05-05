@@ -17,9 +17,11 @@ atexit(()->cudnnDestroy(cudnnHandle))
 
 ### High level interface to CUDNN:
 
-# Datatypes: Tensor, PoolingDescription
+# Datatypes: AbstractTensor, Tensor, Filter, PoolingDescription
 
-immutable Tensor
+abstract AbstractTensor
+
+immutable Tensor <: AbstractTensor
     data::CudaArray
     desc::cudnnTensorDescriptor_t
     # TODO: maybe have a constructor that takes dims only
@@ -39,26 +41,47 @@ immutable Tensor
     end
 end
 
-# CUDArt functions
-CUDArt.to_host(t::Tensor)=to_host(t.data)
-CUDArt.free(t::Tensor)=(free(t.data); cudnnDestroyTensorDescriptor(t.desc))
+# A Filter is identical to a Tensor as a data structure.  The cudnn
+# constructors are the same except there is no stride option for
+# filters.  Docs say "Filters layout must be contiguous in memory."
+
+immutable Filter <: AbstractTensor
+    data::CudaArray
+    desc::cudnnFilterDescriptor_t
+    function Filter(a::Array)
+        dt = (eltype(a) == Float64 ? CUDNN_DATA_DOUBLE :
+              eltype(a) == Float32 ? CUDNN_DATA_FLOAT :
+              error("Supported data types are Float32 and Float64"))
+        c = CudaArray(a)
+        d = cudnnFilterDescriptor_t[0]
+        cudnnCreateFilterDescriptor(d)
+        cudnnSetFilterNdDescriptor(d[1], dt, ndims(a), Cint[reverse(size(a))...])
+        new(c, d[1])
+    end
+end
 
 # Basic array functions
 # TODO: Some of these create unnecessary host arrays, need arrayless constructor.
 # TODO: Make these work with InplaceOps.jl
-Base.eltype(t::Tensor)=eltype(t.data)
-Base.ndims(t::Tensor)=ndims(t.data)
-Base.size(t::Tensor)=size(t.data)
-Base.strides(t::Tensor)=strides(to_host(t)) # CUDArt does not have strides?
-Base.size(t::Tensor,n)=size(t.data,n)
-Base.stride(t::Tensor,n)=stride(t.data,n)
-Base.zeros(t::Tensor)=Tensor(zeros(eltype(t), size(t)))
-Base.ones(t::Tensor)=Tensor(ones(eltype(t), size(t)))
-Base.similar(t::Tensor)=Tensor(Array(eltype(t), size(t)))
-Base.copy(t::Tensor)=Tensor(to_host(t))
+Base.eltype(t::AbstractTensor)=eltype(t.data)
+Base.ndims(t::AbstractTensor)=ndims(t.data)
+Base.size(t::AbstractTensor)=size(t.data)
+Base.strides(t::AbstractTensor)=strides(to_host(t)) # CUDArt does not have strides?
+Base.size(t::AbstractTensor,n)=size(t.data,n)
+Base.stride(t::AbstractTensor,n)=stride(t.data,n)
+Base.zeros{T<:AbstractTensor}(t::T)=T(zeros(eltype(t), size(t)))
+Base.ones{T<:AbstractTensor}(t::T)=T(ones(eltype(t), size(t)))
+Base.similar{T<:AbstractTensor}(t::T)=T(Array(eltype(t), size(t)))
+Base.copy{T<:AbstractTensor}(t::T)=T(to_host(t))
+# TODO: these should be available for Filters as well:
 Base.copy!(dest::Tensor,src::Tensor)=cudnnTransformTensor(1, src, 0, dest)
 Base.fill!(src::Tensor,value::Number)=cudnnSetTensor(src,value)
 Base.scale!(src::Tensor, alpha::Number)=cudnnScaleTensor(src,alpha)
+
+# CUDArt functions
+CUDArt.to_host(t::AbstractTensor)=to_host(t.data)
+CUDArt.free(t::Tensor)=(free(t.data); cudnnDestroyTensorDescriptor(t.desc))
+CUDArt.free(t::Filter)=(free(t.data); cudnnDestroyFilterDescriptor(t.desc))
 
 # Read the tensor descriptor (mostly for debugging)
 cudnnGetTensorNdDescriptor(t::Tensor)=cudnnGetTensorNdDescriptor(t.desc)
@@ -69,6 +92,17 @@ function cudnnGetTensorNdDescriptor(td::cudnnTensorDescriptor_t, nbDimsRequested
     strideA = Array(Cint, nbDimsRequested)
     cudnnGetTensorNdDescriptor(td,nbDimsRequested,dataType,nbDims,dimA,strideA)
     return (dataType[1], nbDims[1], dimA[1:nbDims[1]], strideA[1:nbDims[1]])
+    # nbDimsRequested > 8 gives error
+end
+
+# Read the filter descriptor (mostly for debugging)
+cudnnGetFilterNdDescriptor(t::Filter)=cudnnGetFilterNdDescriptor(t.desc)
+function cudnnGetFilterNdDescriptor(td::cudnnFilterDescriptor_t, nbDimsRequested=8)
+    dataType = cudnnDataType_t[0]
+    nbDims = Array(Cint, 1)
+    dimA = Array(Cint, nbDimsRequested)
+    cudnnGetFilterNdDescriptor(td,nbDimsRequested,dataType,nbDims,dimA)
+    return (dataType[1], nbDims[1], dimA[1:nbDims[1]])
     # nbDimsRequested > 8 gives error
 end
 
@@ -285,6 +319,7 @@ function cudnnPoolingBackward(pd::PoolingDescriptor, src::Tensor, srcDiff::Tenso
                          ptr(beta,destDiff), destDiff.desc, destDiff.data.ptr)
     return destDiff
 end
+
 
 
 end # module
