@@ -10,30 +10,29 @@ This is a Julia wrapper for the NVIDIA cuDNN GPU accelerated deep
 learning library.  It consists of a low level interface and a high
 level interface.  
 
-The low level interface wraps each function in libcudnn.so in a Julia
-function in libcudnn.jl, each data type in cudnn.h in a Julia datatype
-in types.jl.  These were generated semi-automatically using
-[Clang](https://github.com/ihnorton/Clang.jl) and are well documented
+The low level interface wraps each function from libcudnn.so in a
+Julia function in libcudnn.jl and each data type from cudnn.h in a
+Julia datatype in types.jl.  These were generated semi-automatically
+using [Clang](https://github.com/ihnorton/Clang.jl) and are documented
 in the [cuDNN Library User Guide](https://developer.nvidia.com/cuDNN).
 
-The high level interface introduces some Julia datatypes and provides
-reasonable defaults for arguments when possible.  I will mostly
-describe the high level interface below.  I kept the original names
-from the C library and provided more convenient type signatures,
-return values, and keyword arguments with reasonable defaults for the
-high level interface.  All low level arguments are supported by the
-high level interface using keyword arguments, however only the most
-useful ones are documented below.  Please see CUDNN.jl for the
-complete interface.
+For the high level interface defined in CUDNN.jl, I kept the original
+names from the C library and provided more convenient type signatures,
+return values, and keyword arguments with reasonable defaults.  I will
+mostly describe the high level interface below.  All low level
+arguments from the C library are supported by the high level interface
+using keyword arguments, however only the most useful ones are
+documented below.  Please see CUDNN.jl for the complete interface.
 
 ## Types
 
 We introduce two data types: Tensor and Filter.  Tensors and Filters
-are almost identical data structures except there is no stride option
-for the filter constructor.  CUDNN docs say "Filters layout must be
-contiguous in memory."  We introduce AbstractTensor as their parent
-for common operations, and employ
-[CudaArray](https://github.com/JuliaGPU/CUDArt.jl)'s for their data.
+are almost identical data structures that are differentiated mainly
+because of the assymetric roles they play in convolution.  We
+introduce AbstractTensor as their parent for common operations, and
+employ [CudaArray](https://github.com/JuliaGPU/CUDArt.jl)'s for their
+data.
+
 ```
 abstract AbstractTensor
 immutable Tensor <: AbstractTensor; data::CudaArray; desc::cudnnTensorDescriptor_t; end
@@ -43,16 +42,16 @@ immutable Filter <: AbstractTensor; data::CudaArray; desc::cudnnFilterDescriptor
 Tensors and Filters can be constructed using Array's, CudaArray's, or
 by specifying the element type and dimensions.
 ```
-Tensor(T::Type, dims::Dims), Filter(T::Type, dims::Dims)
-Tensor(T::Type, dims::Integer...), Filter(T::Type, dims::Integer...)
-Tensor(a::Array), Filter(a::Array)
-Tensor(a::CudaArray), Filter(a::CudaArray)
+Tensor(T::Type, dims::Dims);  Filter(T::Type, dims::Dims)
+Tensor(T::Type, dims::Integer...);  Filter(T::Type, dims::Integer...)
+Tensor(a::Array);  Filter(a::Array)
+Tensor(a::CudaArray);  Filter(a::CudaArray)
 ```
 
 Currently only Float32 and Float64 are supported for element types,
-and only 4-D Tensors and Filters are supported by the majority of
-CUDNN functions.  5-D Tensor operations (to support 3-D point clouds)
-are under development.
+and only 4-D Tensors and Filters (useful for 2-D images) are supported
+by the majority of CUDNN functions.  5-D Tensor operations (to process
+3-D point clouds) are under development.
 
 The default order of Tensor dimensions in the C library documentation
 is NCHW, with W being the fastest changing dimension.  These stand for
@@ -63,10 +62,11 @@ dimension.  Similarly the default order of Filter dimensions in Julia
 are (W,H,C,K) standing for width, height, number of input feature
 maps, and number of output feature maps respectively.
 
-The following array operations are supported for Tensors and Filters:
-`eltype`, `ndims`, `size`, `strides`, `stride`, `zeros`, `ones`,
-`similar`, `copy`.  Also `to_host(a::AbstractTensor)` can be used to
-retrieve the contents of a Tensor or Filter in a regular Julia array.
+The following standard array operations are supported for Tensors and
+Filters: `eltype`, `ndims`, `size`, `strides`, `stride`, `zeros`,
+`ones`, `similar`, `copy`.  Also `to_host(a::AbstractTensor)` can be
+used to retrieve the contents of a Tensor or Filter in a regular Julia
+array.
 
 
 ## Convolution
@@ -74,35 +74,65 @@ retrieve the contents of a Tensor or Filter in a regular Julia array.
 `cudnnConvolutionForward(src::Tensor, filter::Filter, [dest::Tensor])`
 This function computes and returns dest, the convolution of src with
 filter under default settings (no padding, stride=1).  For more
-options please see ConvolutionDescriptor in CUDNN.jl and in the C
-library documentation.  For 2-D images if src has size (W,H,C,N) and
-filter has size (X,Y,C,K), the output dest will have size
-(W-X+1,H-Y+1,K,N) .  If dest is not specified it will be allocated.
+options please see ConvolutionDescriptor in CUDNN.jl and the C library
+documentation.  For 2-D images if src has size (W,H,C,N) and filter
+has size (X,Y,C,K), the output dest will have size (W-X+1,H-Y+1,K,N) .
+If dest is not specified it will be allocated.
 
-`cudnnConvolutionBackwardBias(src::Tensor, [dest::Tensor])` Assume
-y=w*x+b where x is the forward input to a convolution layer, w is a
-filter, b is the bias vector, * denotes convolution, and + denotes
-broadcast addition.  Given src=dJ/dy this function computes and
-returns dest=dJ/db which is simply the sum of dJ/dy across each
-channel, i.e. dest=sum(src,(1,2,4)).  It is assumed that there is a
-single scalar bias for each channel, i.e. the same number is added to
-every pixel of every image for that channel after the convolution.
-For 2-D images if src has size (W,H,C,N), dest will have size
-(1,1,C,1).  If dest is not specified it will be allocated.
+For the following, assume y=x*w+b where x is the forward input to a
+convolution layer, y is the output, w is a filter, b is the bias
+vector, * denotes convolution, and + denotes broadcast addition.  J is
+the loss function and dJ/dy is the gradient of the loss function with
+respect to y.
 
-`cudnnConvolutionBackwardFilter(src::Tensor, diff::Tensor, grad::Filter)`
+`cudnnConvolutionBackwardFilter(src::Tensor, diff::Tensor,
+grad::Filter)` Given src=x and diff=dJ/dy, this function computes and
+returns grad=dJ/dw.
 
-`cudnnConvolutionBackwardData(filter::Filter, diff::Tensor, grad::Tensor)`
+`cudnnConvolutionBackwardData(filter::Filter, diff::Tensor,
+grad::Tensor)` Given filter=w and diff=dJ/dy, this function computes
+and returns grad=dJ/dx.
+
+`cudnnConvolutionBackwardBias(src::Tensor, [dest::Tensor])` Given
+src=dJ/dy this function computes and returns dest=dJ/db.  It is
+assumed that there is a single scalar bias for each channel, i.e. the
+same number is added to every pixel of every image for that channel
+after the convolution.  Thus dJ/db is simply the sum of dJ/dy across
+each channel, i.e. dest=sum(src,(1,2,4)).  For 2-D images if src has
+size (W,H,C,N), dest will have size (1,1,C,1).  If dest is not
+specified it will be allocated.
 
 
 ## Pooling
 
-`PoolingDescriptor`
+`PoolingDescriptor(dims; padding=zeros(dims), stride=dims,
+mode=CUDNN_POOLING_MAX)` returns a data structure describing a pooling
+operation.  `dims` specifies the size of the pooling area.  Only 2-D
+tuples are currently supported for `dims`.  Keyword arguments
+`padding` and `stride` are tuples indicating the amount of padding to
+use around the input (0 by default) and the stride for the pooling
+operation (dims by default).  There are three pooling modes specified
+by the `mode` keyword argument: CUDNN_POOLING_MAX,
+CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING,
+CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING.  The first one takes the
+maximum of each pooling area, the last two take the average.  They
+differ on whether or not they include the zero padded entries in the
+averages.  CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING implementation
+is currently buggy so don't use it.
 
-`cudnnPoolingForward(pd::PoolingDescriptor, src::Tensor, dest::Tensor)`
+`cudnnPoolingForward(pd::PoolingDescriptor, src::Tensor,
+dest::Tensor)` Performs the pooling operation specified by pd on src,
+writes the result to dest and returns dest.  The C and N dimensions of
+src and dest should match.  If a src dimension (other than C,N) is x,
+and the corresponding pooling area dimension is d, padding is p,
+stride is s, then the corresponding dest dimension should be
+y=1+ceil((x+2p-d)/s).
 
-`cudnnPoolingBackward(pd::PoolingDescriptor, src::Tensor, srcDiff::Tensor, dest::Tensor, destDiff::Tensor)`
-
+`cudnnPoolingBackward(pd::PoolingDescriptor, src::Tensor,
+srcDiff::Tensor, dest::Tensor, destDiff::Tensor)` If x=dest is the
+forward input to the pooling operation specified by pd, y=src is the
+forward output, and dJ/dy=srcDiff is the loss gradient, this function
+computes and returns dJ/dx=destDiff.
 
 ## Activation Functions
 
