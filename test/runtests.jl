@@ -121,17 +121,19 @@ mytanh(y,dy,dx)=(for i=1:length(dx); dx[i]=dy[i]*(1.0+y[i])*(1.0-y[i]); end; dx)
 @test epseq(to_host(cudnnActivationBackward(ty, tdy, tx, tdx, mode=CUDNN_ACTIVATION_TANH)), mytanh(y,dy,dx))
 
 
-using CUDNN: cudnnSoftmaxForward
-x = (rand(1,1,4,5) - 0.5)       # 5 instances with 4 classes each
+using CUDNN: cudnnSoftmaxForward, CUDNN_SOFTMAX_MODE_CHANNEL, CUDNN_SOFTMAX_MODE_INSTANCE
+x = (rand(5,4,3,2) - 0.5)
 tx = Tensor(x)
 ty = zeros(tx)
-@test epseq(to_host(cudnnSoftmaxForward(tx, ty)), exp(x)./sum(exp(x), 3))
-y = to_host(ty)
+@test epseq(to_host(cudnnSoftmaxForward(tx, ty; mode=CUDNN_SOFTMAX_MODE_INSTANCE)), exp(x)./sum(exp(x), (1,2,3)))
+@test epseq(to_host(cudnnSoftmaxForward(tx, ty; mode=CUDNN_SOFTMAX_MODE_CHANNEL)), exp(x)./sum(exp(x), 3))
 
 using CUDNN: cudnnSoftmaxBackward
 # If y[c,j] is the probability of the correct answer for the j'th instance:
 # dy[c,j] = -1/y[c,j]
 # dy[i!=c,j] = 1/y[c,j]
+x = (rand(1,1,5,4) - 0.5); tx = Tensor(x); ty = zeros(tx)
+cudnnSoftmaxForward(tx,ty); y = to_host(ty)
 r = rand(1:size(y,3), size(y,4)) # Random answer key
 c = sub2ind((size(y,3),size(y,4)), r, 1:size(y,4)) # indices of correct answers
 p = y[c] # probabilities of correct answers
@@ -317,8 +319,7 @@ x = rand(5,4,3,2); tx = Tensor(x)
 w = rand(2,2,3,4); tw = Filter(w)
 ty = cudnnConvolutionForward(tx, tw)
 dy = rand(size(ty)); tdy = Tensor(dy)
-db = map(i->sum(dy[:,:,i,:]), 1:size(dy,3))
-@test epseq(squeeze(to_host(cudnnConvolutionBackwardBias(tdy)),(1,2,4)), db)
+@test epseq(to_host(cudnnConvolutionBackwardBias(tdy)), sum(dy,(1,2,4)))
 
 # TODO: put a more meaningful test here...
 tdx = zeros(tx)
