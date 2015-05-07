@@ -424,7 +424,7 @@ end
 function cudnnConvolutionForward(src::Tensor, filter::Filter, dest=nothing;
                                  handle=cudnnHandle, alpha=1.0, beta=0.0, 
                                  convDesc=defaultConvolutionDescriptor,
-                                 algo=CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM,
+                                 algorithm=CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM,
                                  workSpace=nothing, workSpaceSizeInBytes=0)
     @assert eltype(filter) == eltype(src)
     osize = cudnnGetConvolutionNdForwardOutputDim(src,filter;convDesc=convDesc)
@@ -490,6 +490,7 @@ export cudnnActivationForward, cudnnActivationBackward
 export cudnnSoftmaxForward, cudnnSoftmaxBackward
 export PoolingDescriptor, cudnnPoolingForward, cudnnPoolingBackward
 export cudnnConvolutionForward, cudnnConvolutionBackwardBias, cudnnConvolutionBackwardFilter, cudnnConvolutionBackwardData
+export CUDNN_POOLING_MAX, CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING, CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING
 
 end # module
 
