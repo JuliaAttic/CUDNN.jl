@@ -28,10 +28,9 @@ documented below.  Please see CUDNN.jl for the complete interface.
 
 We introduce two data types: Tensor and Filter.  Tensors and Filters
 are almost identical data structures that are differentiated mainly
-because of the assymetric roles they play in convolution.  We
-introduce AbstractTensor as their parent for common operations, and
-employ [CudaArray](https://github.com/JuliaGPU/CUDArt.jl)'s for their
-data.
+because of the roles they play in a convolution layer.  We introduce
+AbstractTensor as their parent for common operations, and employ
+[CudaArray](https://github.com/JuliaGPU/CUDArt.jl)'s for their data.
 
 ```
 abstract AbstractTensor
@@ -77,7 +76,9 @@ filter under default settings (no padding, stride=1).  For more
 options please see ConvolutionDescriptor in CUDNN.jl and the C library
 documentation.  For 2-D images if src has size (W,H,C,N) and filter
 has size (X,Y,C,K), the output dest will have size (W-X+1,H-Y+1,K,N) .
-If dest is not specified it will be allocated.
+If dest is not specified it will be allocated.  The base `conv2`
+function has been overloaded to handle 4-D tensors using
+cudnnConvolutionForward with padding size one less than filter size.
 
 For the following, assume y=x*w+b where x is the forward input to a
 convolution layer, y is the output, w is a filter, b is the bias

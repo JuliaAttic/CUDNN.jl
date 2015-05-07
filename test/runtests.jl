@@ -328,4 +328,11 @@ tdx = zeros(tx)
 tdw = zeros(tw)
 @test size(cudnnConvolutionBackwardFilter(tx, tdy, tdw)) == size(w)
 
+# Testing correspondence with conv2
+x = rand(5,4); tx = Tensor(reshape(x, (5,4,1,1)))
+w = rand(3,3); tw = Filter(reshape(w, (3,3,1,1)))
+padding=map(x->x-1,size(w))
+@test epseq(squeeze(to_host(cudnnConvolutionForward(tx, tw; convDesc=ConvolutionDescriptor(padding=padding))),(3,4)), conv2(x,w))
+@test epseq(squeeze(to_host(conv2(tx, tw)), (3,4)), conv2(x,w))
+
 :ok

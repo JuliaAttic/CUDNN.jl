@@ -270,7 +270,7 @@ end
 # 0 or else I have no idea what it is doing.
 
 immutable PoolingDescriptor; dims; padding; stride; mode; ptr;
-    function PoolingDescriptor(dims; padding=zeros(dims), stride=dims, mode=CUDNN_POOLING_MAX)
+    function PoolingDescriptor(dims; padding=map(x->0,dims), stride=dims, mode=CUDNN_POOLING_MAX)
         @assert in(mode, (CUDNN_POOLING_MAX, 
                           CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING, 
                           CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING))
@@ -328,9 +328,9 @@ end
 
 
 immutable ConvolutionDescriptor; padding; stride; upscale; mode; ptr;
-    function ConvolutionDescriptor(; dims=2, padding=zeros(Cint,dims), stride=ones(padding), upscale=ones(padding), mode=CUDNN_CONVOLUTION)
+    function ConvolutionDescriptor(; padding=(0,0), stride=map(x->1,padding), upscale=map(x->1,padding), mode=CUDNN_CONVOLUTION)
         @assert in(mode, (CUDNN_CONVOLUTION, CUDNN_CROSS_CORRELATION))
-        @assert length(padding) == length(stride) == length(upscale)
+        # @assert length(padding) == length(stride) == length(upscale)
         cd = Array(cudnnConvolutionDescriptor_t, 1)
         cudnnCreateConvolutionDescriptor(cd)
         cudnnSetConvolutionNdDescriptor(cd[1],length(padding),Cint[padding...],Cint[stride...],Cint[upscale...],mode)
@@ -441,6 +441,16 @@ function cudnnConvolutionForward(src::Tensor, filter::Filter, dest=nothing;
                             filter.desc,filter.data.ptr,
                             convDesc.ptr,algorithm,workSpace.ptr,workSpaceSizeInBytes,
                             cptr(beta,dest),dest.desc,dest.data)
+    return dest
+end
+
+# conv2(x,w) in Julia performs 2-D convolution with padding equal to
+# one less than the w dimensions.
+
+function Base.conv2(src::Tensor, filter::Filter, dest=nothing)
+    cd = ConvolutionDescriptor(padding = (size(filter,1)-1, size(filter,2)-1))
+    dest = cudnnConvolutionForward(src, filter, dest; convDesc=cd)
+    free(cd)
     return dest
 end
 
