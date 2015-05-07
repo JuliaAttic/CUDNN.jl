@@ -431,7 +431,7 @@ function cudnnConvolutionForward(src::Tensor, filter::Filter, dest=nothing;
     (dest == nothing) && (dest = Tensor(eltype(src), osize))
     @assert osize == size(dest)
     @assert eltype(dest) == eltype(src)
-    wsize = cudnnGetConvolutionForwardWorkspaceSize(src, filter, dest, algo)
+    wsize = cudnnGetConvolutionForwardWorkspaceSize(src, filter, dest, algorithm)
     if (workSpace == nothing || workSpaceSizeInBytes < wsize)
         workSpaceSizeInBytes = wsize
         workSpace = CudaArray(Int8, workSpaceSizeInBytes)
@@ -439,7 +439,7 @@ function cudnnConvolutionForward(src::Tensor, filter::Filter, dest=nothing;
     cudnnConvolutionForward(handle,
                             cptr(alpha,src),src.desc,src.data.ptr,
                             filter.desc,filter.data.ptr,
-                            convDesc.ptr,algo,workSpace.ptr,workSpaceSizeInBytes,
+                            convDesc.ptr,algorithm,workSpace.ptr,workSpaceSizeInBytes,
                             cptr(beta,dest),dest.desc,dest.data)
     return dest
 end
