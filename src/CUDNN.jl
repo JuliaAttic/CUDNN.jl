@@ -74,6 +74,7 @@ Base.stride(t::AbstractTensor,n)=stride(t.data,n)
 Base.zeros{T<:AbstractTensor}(t::T)=T(zeros(eltype(t), size(t)))
 Base.ones{T<:AbstractTensor}(t::T)=T(ones(eltype(t), size(t)))
 Base.similar{T<:AbstractTensor}(t::T)=T(eltype(t), size(t))
+Base.similar{T<:AbstractTensor}(t::T, dims::(Int64...,))=T(eltype(t), dims)
 Base.copy{T<:AbstractTensor}(t::T)=T(to_host(t))
 
 # TODO: these should be available for Filters as well:
@@ -130,7 +131,8 @@ end
 
 # Refer to cudnn doc to see what different add modes do
 
-function cudnnAddTensor(mode::cudnnAddMode_t, alpha::Number, bias::Tensor, beta::Number, src::Tensor; handle=cudnnHandle)
+function cudnnAddTensor(bias::Tensor, src::Tensor;
+                        handle=cudnnHandle, alpha=1.0, beta=1.0, mode=CUDNN_ADD_SAME_C)
     cudnnAddTensor(handle, mode, cptr(alpha,bias), bias.desc, bias.data.ptr, cptr(beta,src), src.desc, src.data.ptr)
     return src
 end
@@ -315,6 +317,14 @@ end
 #     tuple(outputTensorDimA...)
 # end
 
+function cudnnGetPoolingNdForwardOutputDim(pd::PoolingDescriptor, input::Tensor)
+    dims = [size(input)...]
+    for i=1:length(dims)-2
+        dims[i] = 1 + ceil((dims[i] + 2*pd.padding[i] - pd.dims[i]) / pd.stride[i])
+    end
+    tuple(dims...)
+end
+
 
 function cudnnPoolingBackward(pd::PoolingDescriptor, src::Tensor, srcDiff::Tensor, dest::Tensor, destDiff::Tensor; 
                               handle=cudnnHandle, alpha=1.0, beta=0.0)
@@ -414,10 +424,11 @@ function cudnnGetConvolutionForwardAlgorithm(src::Tensor, filter::Filter, dest::
     return algo[1]
 end
 
-function cudnnGetConvolutionForwardWorkspaceSize(src::Tensor, filter::Filter, dest::Tensor, algo::cudnnConvolutionFwdAlgo_t;
-                                                 handle=cudnnHandle, convDesc=defaultConvolutionDescriptor)
+function cudnnGetConvolutionForwardWorkspaceSize(src::Tensor, filter::Filter, dest::Tensor;
+                                                 handle=cudnnHandle, convDesc=defaultConvolutionDescriptor,
+                                                 algorithm=CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM)
     sizeInBytes = Csize_t[0]
-    cudnnGetConvolutionForwardWorkspaceSize(handle,src.desc,filter.desc,convDesc.ptr,dest.desc,algo,sizeInBytes)
+    cudnnGetConvolutionForwardWorkspaceSize(handle,src.desc,filter.desc,convDesc.ptr,dest.desc,algorithm,sizeInBytes)
     return int(sizeInBytes[1])
 end
 
@@ -431,7 +442,7 @@ function cudnnConvolutionForward(src::Tensor, filter::Filter, dest=nothing;
     (dest == nothing) && (dest = Tensor(eltype(src), osize))
     @assert osize == size(dest)
     @assert eltype(dest) == eltype(src)
-    wsize = cudnnGetConvolutionForwardWorkspaceSize(src, filter, dest, algorithm)
+    wsize = cudnnGetConvolutionForwardWorkspaceSize(src, filter, dest; algorithm=algorithm)
     if ((wsize > 0) && (workSpace == nothing || workSpaceSizeInBytes < wsize))
         workSpaceSizeInBytes = wsize
         workSpace = CudaArray(Int8, workSpaceSizeInBytes)

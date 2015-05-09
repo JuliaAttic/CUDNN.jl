@@ -193,9 +193,12 @@ dest::Tensor)` computes alpha * src + beta * dest and places the
 result in dest.  Both beta and dest are optional and are set to 0 and
 ones(src) respectively if not specified.
 
-`cudnnAddTensor(mode::cudnnAddMode_t, alpha::Number, bias::Tensor,
-beta::Number, src::Tensor)` please refer to the C library
-documentation to see what different add modes do.
+`cudnnAddTensor(bias::Tensor, src::Tensor)` adds the values in the
+bias tensor to the src tensor.  The dimensions n,w,h of the bias
+tensor must be 1 and the dimension c of the two tensors must match.
+There are other modes of operation specified by the mode keyword
+argument documented in the C library reference.  The default mode is
+compatible with `cudnnConvolutionBackwardBias`.
 
 `cudnnSetTensor(src::Tensor, value::Number)` sets each element of the
 src Tensor to value.  `fill!(src, value)` is defined to call this

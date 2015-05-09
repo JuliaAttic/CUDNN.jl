@@ -18,9 +18,9 @@ function testdims()
             CUDNN.cudnnScaleTensor(x, pi)
             CUDNN.cudnnSetTensor(x, pi)
             CUDNN.cudnnTransformTensor(2.0, x, 3.0, y)
-            bdim = ones(dims); bdim[1]=dims[1]; bdim[2]=dims[2]
+            bdim = ones(dims); bdim[end-1]=dims[end-1]
             bias = CUDNN.Tensor(rand(bdim...))
-            CUDNN.cudnnAddTensor(CUDNN.CUDNN_ADD_IMAGE, 1, bias, 1, x)
+            CUDNN.cudnnAddTensor(bias, x)
         catch y
             println(y)
         end
@@ -69,10 +69,10 @@ ty = Tensor(y)
 @test to_host(cudnnTransformTensor(2, tx, 3, ty)) == 2x+3y
 
 
-using CUDNN: cudnnAddTensor, CUDNN_ADD_IMAGE
-b = rand(5,4,1,1)
+using CUDNN: cudnnAddTensor
+b = rand(1,1,3,1)
 tb = Tensor(b)
-@test to_host(cudnnAddTensor(CUDNN_ADD_IMAGE, 1, tb, 1, tx)) == x .+ b
+@test to_host(cudnnAddTensor(tb,tx)) == x .+ b
 
 
 using CUDNN: cudnnSetTensor
@@ -172,7 +172,7 @@ pd = PoolingDescriptor((3,3); padding=(2,2), stride=(1,1), mode=CUDNN_POOLING_MA
 @test cudnnGetPoolingNdDescriptor(pd) == (CUDNN_POOLING_MAX, length(pd.dims), pd.dims, pd.padding, pd.stride)
 # free(pd)
 
-using CUDNN: cudnnPoolingForward, cudnnPoolingBackward
+using CUDNN: cudnnPoolingForward, cudnnPoolingBackward, cudnnGetPoolingNdForwardOutputDim
 x = reshape(Float64[1:20], 5, 4, 1, 1); tx = Tensor(x)
 
 # 1.0   6.0  11.0  16.0
@@ -184,12 +184,15 @@ x = reshape(Float64[1:20], 5, 4, 1, 1); tx = Tensor(x)
 # 3 size, 0 pad, 1 stride
 ty1 = Tensor(zeros(3, 2, 1, 1))
 pd1 = PoolingDescriptor((3,3); padding=(0,0), stride=(1,1), mode=CUDNN_POOLING_MAX)
+@test cudnnGetPoolingNdForwardOutputDim(pd1, tx) == (3,2,1,1)
 @test squeeze(to_host(cudnnPoolingForward(pd1, tx, ty1)),(3,4)) == [13 18; 14 19; 15 20.]
 ty2 = Tensor(zeros(3, 2, 1, 1))
 pd2 = PoolingDescriptor((3,3); padding=(0,0), stride=(1,1), mode=CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING)
+@test cudnnGetPoolingNdForwardOutputDim(pd2, tx) == (3,2,1,1)
 @test squeeze(to_host(cudnnPoolingForward(pd2, tx, ty2)),(3,4)) == [7 12; 8 13; 9 14.]
 ty3 = Tensor(zeros(3, 2, 1, 1))
 pd3 = PoolingDescriptor((3,3); padding=(0,0), stride=(1,1), mode=CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING)
+@test cudnnGetPoolingNdForwardOutputDim(pd3, tx) == (3,2,1,1)
 @test squeeze(to_host(cudnnPoolingForward(pd3, tx, ty3)),(3,4)) == [7 12; 8 13; 9 14.]
 
 dy1 = reshape(Float64[1:6], 3, 2, 1, 1); 
@@ -204,14 +207,17 @@ tdx3 = zeros(tx)
 # 3 size, 1 pad, 1 stride
 ty4 = Tensor(zeros(5, 4, 1, 1))
 pd4 = PoolingDescriptor((3,3); padding=(1,1), stride=(1,1), mode=CUDNN_POOLING_MAX)
+@test cudnnGetPoolingNdForwardOutputDim(pd4, tx) == (5,4,1,1)
 @test squeeze(to_host(cudnnPoolingForward(pd4, tx, ty4)),(3,4)) == [7 12 17 17; 8 13 18 18; 9 14 19 19; 10 15 20 20; 10 15 20 20.]
 ty5 = Tensor(zeros(5, 4, 1, 1))
 pd5 = PoolingDescriptor((3,3); padding=(1,1), stride=(1,1), mode=CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING)
+@test cudnnGetPoolingNdForwardOutputDim(pd5, tx) == (5,4,1,1)
 @test squeeze(to_host(cudnnPoolingForward(pd5, tx, ty5)),(3,4)) == [16/9 39/9 69/9 56/9; 3 7 12 87/9; 33/9 8 13 93/9; 39/9 9 14 11; 28/9 57/9 87/9 68/9]
 # This is buggy in the library:
 ty6 = Tensor(zeros(5, 4, 1, 1))
 pd6 = PoolingDescriptor((3,3); padding=(1,1), stride=(1,1), mode=CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING)
 cudnnPoolingForward(pd6, tx, ty6)
+@test cudnnGetPoolingNdForwardOutputDim(pd6, tx) == (5,4,1,1)
 # @test squeeze(to_host(cudnnPoolingForward(pd6, tx, ty6)),(3,4)) == [16/4 39/6 69/6 56/4; 27/6 7 12 87/6; 33/6 8 13 93/6; 39/6 9 14 99/6; 28/4 57/6 87/6 68/4]
 # dump( squeeze(to_host(cudnnPoolingForward(pd6, tx, ty6)),(3,4)) )
 # dump( [16/4 39/6 69/6 56/4; 27/6 7 12 87/6; 33/6 8 13 93/6; 39/6 9 14 99/6; 28/4 57/6 87/6 68/4] )
@@ -230,10 +236,12 @@ cudnnPoolingBackward(pd6, ty6, tdy4, tx, tdx6)
 # 3 size, 1 pad, 2 stride
 ty7 = Tensor(zeros(3, 3, 1, 1))
 pd7 = PoolingDescriptor((3,3); padding=(1,1), stride=(2,2), mode=CUDNN_POOLING_MAX)
+@test cudnnGetPoolingNdForwardOutputDim(pd7, tx) == (3,3,1,1)
 @test squeeze(to_host(cudnnPoolingForward(pd7, tx, ty7)),(3,4)) == [7 17 17; 9 19 19; 10 20 20.]
 # Note below that if the window falls outside the padding, the denom can be less than 9!
 ty8 = Tensor(zeros(3, 3, 1, 1))
 pd8 = PoolingDescriptor((3,3); padding=(1,1), stride=(2,2), mode=CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING)
+@test cudnnGetPoolingNdForwardOutputDim(pd8, tx) == (3,3,1,1)
 @test squeeze(to_host(cudnnPoolingForward(pd8, tx, ty8)),(3,4)) == [16/9 69/9 33/6; 33/9 13 54/6; 28/9 87/9 39/6]
 # This is buggy in the library:
 # ty9 = Tensor(zeros(3, 3, 1, 1))
@@ -299,11 +307,11 @@ dst = Tensor(ones(cudnnGetConvolutionNdForwardOutputDim(src, flt)))
 @test cudnnGetConvolutionForwardAlgorithm(src, flt, dst; preference=CUDNN_CONVOLUTION_FWD_SPECIFY_WORKSPACE_LIMIT) == CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM
 
 using CUDNN: cudnnGetConvolutionForwardWorkspaceSize
-@test cudnnGetConvolutionForwardWorkspaceSize(src, flt, dst, CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM) == 0
-@test cudnnGetConvolutionForwardWorkspaceSize(src, flt, dst, CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM) == 4500 # size(flt,1)*size(flt,2)*size(flt,3)*sizeof(Cint)
-@test cudnnGetConvolutionForwardWorkspaceSize(src, flt, dst, CUDNN_CONVOLUTION_FWD_ALGO_GEMM) == 6107400000
+@test cudnnGetConvolutionForwardWorkspaceSize(src, flt, dst; algorithm=CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM) == 0
+@test cudnnGetConvolutionForwardWorkspaceSize(src, flt, dst; algorithm=CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM) == 4500 # size(flt,1)*size(flt,2)*size(flt,3)*sizeof(Cint)
+@test cudnnGetConvolutionForwardWorkspaceSize(src, flt, dst; algorithm=CUDNN_CONVOLUTION_FWD_ALGO_GEMM) == 6107400000
 # Not supported yet:
-# @show cudnnGetConvolutionForwardWorkspaceSize(src, flt, dst, CUDNN_CONVOLUTION_FWD_ALGO_DIRECT)
+# @show cudnnGetConvolutionForwardWorkspaceSize(src, flt, dst; algorithm=CUDNN_CONVOLUTION_FWD_ALGO_DIRECT)
 
 using CUDNN: cudnnConvolutionForward
 x = reshape(Float64[1:20], 5, 4, 1, 1); tx = Tensor(x)
