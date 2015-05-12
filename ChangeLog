@@ -1,3 +1,8 @@
+2015-05-11    <dyuret@ku.edu.tr>
+
+	* TODO: allow kernel sizes for convolution and pooling to be
+	determined by a single number.
+
 2015-05-01    <dyuret@ku.edu.tr>
 
 	* dims: Supported ops based on tensor dimension.
