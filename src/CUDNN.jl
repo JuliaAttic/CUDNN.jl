@@ -68,6 +68,7 @@ end
 Base.eltype(t::AbstractTensor)=eltype(t.data)
 Base.ndims(t::AbstractTensor)=ndims(t.data)
 Base.size(t::AbstractTensor)=size(t.data)
+Base.length(t::AbstractTensor)=length(t.data)
 Base.strides(t::AbstractTensor)=strides(t.data)
 Base.size(t::AbstractTensor,n)=size(t.data,n)
 Base.stride(t::AbstractTensor,n)=stride(t.data,n)
@@ -510,8 +511,9 @@ export cudnnTransformTensor, cudnnAddTensor, cudnnSetTensor, cudnnScaleTensor
 export cudnnActivationForward, cudnnActivationBackward
 export cudnnSoftmaxForward, cudnnSoftmaxBackward
 export PoolingDescriptor, cudnnPoolingForward, cudnnPoolingBackward
-export cudnnConvolutionForward, cudnnConvolutionBackwardBias, cudnnConvolutionBackwardFilter, cudnnConvolutionBackwardData
+export ConvolutionDescriptor, cudnnConvolutionForward, cudnnConvolutionBackwardBias, cudnnConvolutionBackwardFilter, cudnnConvolutionBackwardData
 export CUDNN_POOLING_MAX, CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING, CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING
+export cudnnGetConvolutionNdForwardOutputDim, cudnnGetPoolingNdForwardOutputDim, cudnnGetConvolutionForwardWorkspaceSize
 
 end # module
 
