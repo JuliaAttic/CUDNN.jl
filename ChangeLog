@@ -1,3 +1,9 @@
+2015-05-12    <dyuret@ku.edu.tr>
+
+	* src/CUDNN.jl: Eliminated Tensor and Filter types, replacing them
+	with CudaArray.  Descriptors are created on the spot and
+	eliminated by finalizers.  TODO: update README.
+
 2015-05-11    <dyuret@ku.edu.tr>
 
 	* TODO: allow kernel sizes for convolution and pooling to be
