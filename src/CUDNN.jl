@@ -189,6 +189,8 @@ end
 
 type PoolingDescriptor; ptr; dims; padding; stride; mode; end
 
+# TODO: allow initialization with a single number
+
 function PoolingDescriptor(dims; padding=map(x->0,dims), stride=dims, mode=CUDNN_POOLING_MAX)
     @assert in(mode, (CUDNN_POOLING_MAX, 
                       CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING, 
@@ -196,6 +198,7 @@ function PoolingDescriptor(dims; padding=map(x->0,dims), stride=dims, mode=CUDNN
     @assert length(dims) == length(padding) == length(stride)
     pd = cudnnPoolingDescriptor_t[0]
     cudnnCreatePoolingDescriptor(pd)
+    # TODO: shouldn't we reverse these dims?
     cudnnSetPoolingNdDescriptor(pd[1],mode,length(dims),Cint[dims...],Cint[padding...],Cint[stride...])
     this = PoolingDescriptor(pd[1], dims, padding, stride, mode)
     finalizer(this, free)
