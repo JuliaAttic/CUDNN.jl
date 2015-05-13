@@ -1,4 +1,5 @@
 using Base.Test
+using CUDArt
 
 # Uncomment this if you want lots of messages:
 Base.Test.default_handler(r::Base.Test.Success) = info("$(r.expr)")
@@ -9,17 +10,17 @@ function testdims()
         @show n
         try
             dims = [(n+1):-1:2]
-            x = CUDNN.Tensor(rand(dims...))
-            y = CUDNN.Tensor(rand(dims...))
-            dx = CUDNN.Tensor(rand(dims...))
-            dy = CUDNN.Tensor(rand(dims...))
+            x = CudaArray(rand(dims...))
+            y = CudaArray(rand(dims...))
+            dx = CudaArray(rand(dims...))
+            dy = CudaArray(rand(dims...))
             CUDNN.cudnnActivationBackward(CUDNN.CUDNN_ACTIVATION_RELU, y, dy, x, dx)
             CUDNN.cudnnActivationForward(CUDNN.CUDNN_ACTIVATION_RELU, x)
             CUDNN.cudnnScaleTensor(x, pi)
             CUDNN.cudnnSetTensor(x, pi)
             CUDNN.cudnnTransformTensor(2.0, x, 3.0, y)
             bdim = ones(dims); bdim[end-1]=dims[end-1]
-            bias = CUDNN.Tensor(rand(bdim...))
+            bias = CudaArray(rand(bdim...))
             CUDNN.cudnnAddTensor(bias, x)
         catch y
             println(y)
@@ -56,22 +57,22 @@ cudnnGetTensorNdDescriptor(d[1],nd,dt,nbDims,dimA,strideA)
 @test (nbDims, dimA, strideA) == (Cint[4], Cint[2,3,4,5], Cint[60,20,5,1])
 
 
-using CUDNN: Tensor, to_host
+using CUDNN: TD
 x = rand(5,4,3,2)
-tx = Tensor(x)
+tx = CudaArray(x)
 @test to_host(tx) == x
-@test cudnnGetTensorNdDescriptor(tx) == (CUDNN_DATA_DOUBLE, 4, [reverse(size(x))...], [reverse(strides(x))...])
+@test cudnnGetTensorNdDescriptor(TD(tx)) == (CUDNN_DATA_DOUBLE, 4, [reverse(size(x))...], [reverse(strides(x))...])
 
 
 using CUDNN: cudnnTransformTensor
 y = rand(5,4,3,2)
-ty = Tensor(y)
+ty = CudaArray(y)
 @test to_host(cudnnTransformTensor(2, tx, 3, ty)) == 2x+3y
 
 
 using CUDNN: cudnnAddTensor
 b = rand(1,1,3,1)
-tb = Tensor(b)
+tb = CudaArray(b)
 @test to_host(cudnnAddTensor(tb,tx)) == x .+ b
 
 
@@ -81,49 +82,50 @@ using CUDNN: cudnnSetTensor
 
 using CUDNN: cudnnScaleTensor
 x = rand(5,4,3,2)
-tx = Tensor(x)
+tx = CudaArray(x)
 @test to_host(cudnnScaleTensor(tx, pi)) == x .* pi
 
 
 using CUDNN: cudnnActivationForward, CUDNN_ACTIVATION_RELU
 myrelu(x,y)=(copy!(y,x);for i=1:length(y); (y[i]<zero(y[i]))&&(y[i]=zero(y[i])); end; y)
-x = rand(5,4,3,2) - 0.5; tx = Tensor(x)
-y = zeros(5,4,3,2); ty = Tensor(y)
+x = rand(5,4,3,2) - 0.5; tx = CudaArray(x)
+y = zeros(5,4,3,2); ty = CudaArray(y)
 @test to_host(cudnnActivationForward(tx, ty, mode=CUDNN_ACTIVATION_RELU)) == myrelu(x, y)
 
 using CUDNN: cudnnActivationBackward
-dy = (rand(5,4,3,2) - 0.5); tdy = Tensor(dy)
-dx = zeros(5,4,3,2); tdx = Tensor(dx)
+dy = (rand(5,4,3,2) - 0.5); tdy = CudaArray(dy)
+dx = zeros(5,4,3,2); tdx = CudaArray(dx)
 myrelu(y,dy,dx)=(copy!(dx,dy);for i=1:length(y); (y[i]==zero(y[i]))&&(dx[i]=zero(dx[i])); end; dx)
 @test to_host(cudnnActivationBackward(ty, tdy, tx, tdx, mode=CUDNN_ACTIVATION_RELU)) == myrelu(y,dy,dx)
 
 using CUDNN: CUDNN_ACTIVATION_SIGMOID
 mysigm(x,y)=(for i=1:length(y); y[i]=(1.0/(1.0+exp(-x[i]))); end; y)
 epseq(x,y)=(maximum(abs(x-y)) < 1e-14)
-x = rand(5,4,3,2) - 0.5; tx = Tensor(x)
-y = zeros(5,4,3,2); ty = Tensor(y)
+x = rand(5,4,3,2) - 0.5; tx = CudaArray(x)
+y = zeros(5,4,3,2); ty = CudaArray(y)
 @test epseq(to_host(cudnnActivationForward(tx, ty, mode=CUDNN_ACTIVATION_SIGMOID)), mysigm(x, y))
 
-dy = (rand(5,4,3,2) - 0.5); tdy = Tensor(dy)
-dx = zeros(5,4,3,2); tdx = Tensor(dx)
+dy = (rand(5,4,3,2) - 0.5); tdy = CudaArray(dy)
+dx = zeros(5,4,3,2); tdx = CudaArray(dx)
 mysigm(y,dy,dx)=(for i=1:length(dx); dx[i]=dy[i]*y[i]*(1.0-y[i]); end; dx)
 @test epseq(to_host(cudnnActivationBackward(ty, tdy, tx, tdx, mode=CUDNN_ACTIVATION_SIGMOID)), mysigm(y,dy,dx))
 
 using CUDNN: CUDNN_ACTIVATION_TANH
 mytanh(x,y)=(for i=1:length(y); y[i]=tanh(x[i]); end; y)
-x = rand(5,4,3,2) - 0.5; tx = Tensor(x)
-y = zeros(5,4,3,2); ty = Tensor(y)
+x = rand(5,4,3,2) - 0.5; tx = CudaArray(x)
+y = zeros(5,4,3,2); ty = CudaArray(y)
 @test epseq(to_host(cudnnActivationForward(tx, ty, mode=CUDNN_ACTIVATION_TANH)), mytanh(x, y))
 
-dy = (rand(5,4,3,2) - 0.5); tdy = Tensor(dy)
-dx = zeros(5,4,3,2); tdx = Tensor(dx)
+dy = (rand(5,4,3,2) - 0.5); tdy = CudaArray(dy)
+dx = zeros(5,4,3,2); tdx = CudaArray(dx)
 mytanh(y,dy,dx)=(for i=1:length(dx); dx[i]=dy[i]*(1.0+y[i])*(1.0-y[i]); end; dx)
 @test epseq(to_host(cudnnActivationBackward(ty, tdy, tx, tdx, mode=CUDNN_ACTIVATION_TANH)), mytanh(y,dy,dx))
 
 
 using CUDNN: cudnnSoftmaxForward, CUDNN_SOFTMAX_MODE_CHANNEL, CUDNN_SOFTMAX_MODE_INSTANCE
 x = (rand(5,4,3,2) - 0.5)
-tx = Tensor(x)
+tx = CudaArray(x)
+Base.zeros(a::CudaArray)=cudnnSetTensor(similar(a), zero(eltype(a)))
 ty = zeros(tx)
 @test epseq(to_host(cudnnSoftmaxForward(tx, ty; mode=CUDNN_SOFTMAX_MODE_INSTANCE)), exp(x)./sum(exp(x), (1,2,3)))
 @test epseq(to_host(cudnnSoftmaxForward(tx, ty; mode=CUDNN_SOFTMAX_MODE_CHANNEL)), exp(x)./sum(exp(x), 3))
@@ -132,7 +134,7 @@ using CUDNN: cudnnSoftmaxBackward
 # If y[c,j] is the probability of the correct answer for the j'th instance:
 # dy[c,j] = -1/y[c,j]
 # dy[i!=c,j] = 1/y[c,j]
-x = (rand(1,1,5,4) - 0.5); tx = Tensor(x); ty = zeros(tx)
+x = (rand(1,1,5,4) - 0.5); tx = CudaArray(x); ty = zeros(tx)
 cudnnSoftmaxForward(tx,ty); y = to_host(ty)
 r = rand(1:size(y,3), size(y,4)) # Random answer key
 c = sub2ind((size(y,3),size(y,4)), r, 1:size(y,4)) # indices of correct answers
@@ -141,7 +143,7 @@ dy = zeros(y)
 for i=1:size(dy,3); dy[:,:,i,:] = 1./p; end  # dy = 1/p for incorrect answers
 dy[c] *= -1.0 # dy = -1/p for correct answers
 dy *= 0.5  # this is a cudnn bug
-tdy = Tensor(dy)
+tdy = CudaArray(dy)
 tdx = zeros(tdy)
 # We should have dx = y-1 for correct answers, dx = y for wrong answers
 dx = copy(y); dx[c] .-= 1
@@ -151,7 +153,7 @@ dx = copy(y); dx[c] .-= 1
 # using CUDNN: cudnnPoolingDescriptor_t, cudnnCreatePoolingDescriptor, cudnnSetPooling2dDescriptor
 # # x = rand(5,4,1,1)
 # x = reshape(Float64[1:20], 5, 4, 1, 1)
-# tx = Tensor(x)
+# tx = CudaArray(x)
 # pdptr = Array(cudnnPoolingDescriptor_t, 1)
 # cudnnCreatePoolingDescriptor(pdptr)
 # pd = pdptr[1]
@@ -159,7 +161,7 @@ dx = copy(y); dx[c] .-= 1
 # #cudnnSetPooling2dDescriptor(pd, CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING, 3, 3, 0, 0, 1, 1)
 # cudnnSetPooling2dDescriptor(pd, CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING, 3, 3, 0, 0, 1, 1)
 # #cudnnSetPooling2dDescriptor(pd, CUDNN_POOLING_MAX, 3, 3, 0, 0, 1, 1)
-# ty = Tensor(ones(10,9,1,1))
+# ty = CudaArray(ones(10,9,1,1))
 # using CUDNN: cudnnHandle, ptr, cudnnPoolingForward
 # cudnnPoolingForward(cudnnHandle, pd, ptr(1,tx), tx.desc, tx.data.ptr, ptr(0,ty), ty.desc, ty.data.ptr)
 # y = to_host(ty)
@@ -173,7 +175,7 @@ pd = PoolingDescriptor((3,3); padding=(2,2), stride=(1,1), mode=CUDNN_POOLING_MA
 # free(pd)
 
 using CUDNN: cudnnPoolingForward, cudnnPoolingBackward, cudnnGetPoolingNdForwardOutputDim
-x = reshape(Float64[1:20], 5, 4, 1, 1); tx = Tensor(x)
+x = reshape(Float64[1:20], 5, 4, 1, 1); tx = CudaArray(x)
 
 # 1.0   6.0  11.0  16.0
 # 2.0   7.0  12.0  17.0
@@ -182,21 +184,21 @@ x = reshape(Float64[1:20], 5, 4, 1, 1); tx = Tensor(x)
 # 5.0  10.0  15.0  20.0
 
 # 3 size, 0 pad, 1 stride
-ty1 = Tensor(zeros(3, 2, 1, 1))
+ty1 = CudaArray(zeros(3, 2, 1, 1))
 pd1 = PoolingDescriptor((3,3); padding=(0,0), stride=(1,1), mode=CUDNN_POOLING_MAX)
 @test cudnnGetPoolingNdForwardOutputDim(pd1, tx) == (3,2,1,1)
 @test squeeze(to_host(cudnnPoolingForward(pd1, tx, ty1)),(3,4)) == [13 18; 14 19; 15 20.]
-ty2 = Tensor(zeros(3, 2, 1, 1))
+ty2 = CudaArray(zeros(3, 2, 1, 1))
 pd2 = PoolingDescriptor((3,3); padding=(0,0), stride=(1,1), mode=CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING)
 @test cudnnGetPoolingNdForwardOutputDim(pd2, tx) == (3,2,1,1)
 @test squeeze(to_host(cudnnPoolingForward(pd2, tx, ty2)),(3,4)) == [7 12; 8 13; 9 14.]
-ty3 = Tensor(zeros(3, 2, 1, 1))
+ty3 = CudaArray(zeros(3, 2, 1, 1))
 pd3 = PoolingDescriptor((3,3); padding=(0,0), stride=(1,1), mode=CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING)
 @test cudnnGetPoolingNdForwardOutputDim(pd3, tx) == (3,2,1,1)
 @test squeeze(to_host(cudnnPoolingForward(pd3, tx, ty3)),(3,4)) == [7 12; 8 13; 9 14.]
 
 dy1 = reshape(Float64[1:6], 3, 2, 1, 1); 
-tdy1 = Tensor(dy1)
+tdy1 = CudaArray(dy1)
 tdx1 = zeros(tx)
 @test squeeze(to_host(cudnnPoolingBackward(pd1, ty1, tdy1, tx, tdx1)),(3,4)) == [0 0 0 0;0 0 0 0;0 0 1 4;0 0 2 5;0 0 3 6.]
 tdx2 = zeros(tx)
@@ -205,16 +207,16 @@ tdx3 = zeros(tx)
 @test epseq(squeeze(to_host(cudnnPoolingBackward(pd3, ty3, tdy1, tx, tdx3)),(3,4)), [1/9 5/9 5/9 4/9;3/9 12/9 12/9 9/9;6/9 21/9 21/9 15/9;5/9 16/9 16/9 11/9;3/9 9/9 9/9 6/9])
 
 # 3 size, 1 pad, 1 stride
-ty4 = Tensor(zeros(5, 4, 1, 1))
+ty4 = CudaArray(zeros(5, 4, 1, 1))
 pd4 = PoolingDescriptor((3,3); padding=(1,1), stride=(1,1), mode=CUDNN_POOLING_MAX)
 @test cudnnGetPoolingNdForwardOutputDim(pd4, tx) == (5,4,1,1)
 @test squeeze(to_host(cudnnPoolingForward(pd4, tx, ty4)),(3,4)) == [7 12 17 17; 8 13 18 18; 9 14 19 19; 10 15 20 20; 10 15 20 20.]
-ty5 = Tensor(zeros(5, 4, 1, 1))
+ty5 = CudaArray(zeros(5, 4, 1, 1))
 pd5 = PoolingDescriptor((3,3); padding=(1,1), stride=(1,1), mode=CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING)
 @test cudnnGetPoolingNdForwardOutputDim(pd5, tx) == (5,4,1,1)
 @test squeeze(to_host(cudnnPoolingForward(pd5, tx, ty5)),(3,4)) == [16/9 39/9 69/9 56/9; 3 7 12 87/9; 33/9 8 13 93/9; 39/9 9 14 11; 28/9 57/9 87/9 68/9]
 # This is buggy in the library:
-ty6 = Tensor(zeros(5, 4, 1, 1))
+ty6 = CudaArray(zeros(5, 4, 1, 1))
 pd6 = PoolingDescriptor((3,3); padding=(1,1), stride=(1,1), mode=CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING)
 cudnnPoolingForward(pd6, tx, ty6)
 @test cudnnGetPoolingNdForwardOutputDim(pd6, tx) == (5,4,1,1)
@@ -223,7 +225,7 @@ cudnnPoolingForward(pd6, tx, ty6)
 # dump( [16/4 39/6 69/6 56/4; 27/6 7 12 87/6; 33/6 8 13 93/6; 39/6 9 14 99/6; 28/4 57/6 87/6 68/4] )
 
 dy4 = reshape(Float64[1:20], 5, 4, 1, 1); 
-tdy4 = Tensor(dy4)
+tdy4 = CudaArray(dy4)
 tdx4 = zeros(tx)
 @test squeeze(to_host(cudnnPoolingBackward(pd4, ty4, tdy4, tx, tdx4)),(3,4)) == [0 0 0 0;0 1 6 11+16;0 2 7 12+17;0 3 8 13+18;0 4+5 9+10 14+15+19+20.]
 tdx5 = zeros(tx)
@@ -234,24 +236,24 @@ cudnnPoolingBackward(pd6, ty6, tdy4, tx, tdx6)
 # @show (squeeze(to_host(cudnnPoolingBackward(pd6, ty6, tdy4, tx, tdx6)),(3,4)), [1/9 5/9 5/9 4/9;3/9 12/9 12/9 9/9;6/9 21/9 21/9 15/9;5/9 16/9 16/9 11/9;3/9 9/9 9/9 6/9])
 
 # 3 size, 1 pad, 2 stride
-ty7 = Tensor(zeros(3, 3, 1, 1))
+ty7 = CudaArray(zeros(3, 3, 1, 1))
 pd7 = PoolingDescriptor((3,3); padding=(1,1), stride=(2,2), mode=CUDNN_POOLING_MAX)
 @test cudnnGetPoolingNdForwardOutputDim(pd7, tx) == (3,3,1,1)
 @test squeeze(to_host(cudnnPoolingForward(pd7, tx, ty7)),(3,4)) == [7 17 17; 9 19 19; 10 20 20.]
 # Note below that if the window falls outside the padding, the denom can be less than 9!
-ty8 = Tensor(zeros(3, 3, 1, 1))
+ty8 = CudaArray(zeros(3, 3, 1, 1))
 pd8 = PoolingDescriptor((3,3); padding=(1,1), stride=(2,2), mode=CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING)
 @test cudnnGetPoolingNdForwardOutputDim(pd8, tx) == (3,3,1,1)
 @test squeeze(to_host(cudnnPoolingForward(pd8, tx, ty8)),(3,4)) == [16/9 69/9 33/6; 33/9 13 54/6; 28/9 87/9 39/6]
 # This is buggy in the library:
-# ty9 = Tensor(zeros(3, 3, 1, 1))
+# ty9 = CudaArray(zeros(3, 3, 1, 1))
 # pd9 = PoolingDescriptor((3,3); padding=(1,1), stride=(2,2), mode=CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING)
 # dump( squeeze(to_host(cudnnPoolingForward(pd9, tx, ty9)),(3,4)) )
 # dump( [16/4 69/6 33/2; 33/6 13 54/3; 28/4 87/6 39/2] )
 
 # 3D pooling not supported:
-# x10 = reshape(Float64[1:60], 5, 4, 3, 1, 1); tx10 = Tensor(x10)
-# ty10 = Tensor(zeros(3, 2, 1, 1, 1))
+# x10 = reshape(Float64[1:60], 5, 4, 3, 1, 1); tx10 = CudaArray(x10)
+# ty10 = CudaArray(zeros(3, 2, 1, 1, 1))
 # pd10 = PoolingDescriptor((3,3,3); padding=(0,0,0), stride=(1,1,1), mode=CUDNN_POOLING_MAX)
 # @show cudnnPoolingForward(pd10, tx10, ty10)
 
@@ -274,11 +276,11 @@ cudnnGetFilterNdDescriptor(d[1],nd,dt,nbDims,dimA)
 @test (nbDims, dimA) == (Cint[4], Cint[2,3,4,5])
 
 
-using CUDNN: Filter, to_host
+using CUDNN: FD
 x = rand(5,4,3,2)
-tx = Filter(x)
+tx = CudaArray(x)
 @test to_host(tx) == x
-@test cudnnGetFilterNdDescriptor(tx) == (CUDNN_DATA_DOUBLE, 4, [reverse(size(x))...])
+@test cudnnGetFilterNdDescriptor(FD(tx)) == (CUDNN_DATA_DOUBLE, 4, [reverse(size(x))...])
 
 # Convolution
 
@@ -291,17 +293,17 @@ pd = ConvolutionDescriptor(padding=(0,0), stride=(1,1), upscale=(1,1), mode=CUDN
 # Note: conv vs xcor
 
 using CUDNN: cudnnGetConvolutionNdForwardOutputDim
-@test cudnnGetConvolutionNdForwardOutputDim(Tensor(ones(12,8,3,6)), Filter(ones(5,4,3,2))) == (8,5,2,6)
+@test cudnnGetConvolutionNdForwardOutputDim(CudaArray(ones(12,8,3,6)), CudaArray(ones(5,4,3,2))) == (8,5,2,6)
 # Does not work for dimensions other than 4 yet:
-# @show cudnnGetConvolutionNdForwardOutputDim(Tensor(ones(13,12,11,3,10)), Filter(ones(6,5,4,3,2)))
+# @show cudnnGetConvolutionNdForwardOutputDim(CudaArray(ones(13,12,11,3,10)), CudaArray(ones(6,5,4,3,2)))
 
 using CUDNN: CUDNN_CONVOLUTION_FWD_NO_WORKSPACE, CUDNN_CONVOLUTION_FWD_PREFER_FASTEST, CUDNN_CONVOLUTION_FWD_SPECIFY_WORKSPACE_LIMIT
 using CUDNN: CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM, CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM, CUDNN_CONVOLUTION_FWD_ALGO_GEMM, CUDNN_CONVOLUTION_FWD_ALGO_DIRECT
 
 using CUDNN: cudnnGetConvolutionForwardAlgorithm
-src = Tensor(ones(102,101,3,100))
-flt = Filter(ones(25,15,3,99))
-dst = Tensor(ones(cudnnGetConvolutionNdForwardOutputDim(src, flt)))
+src = CudaArray(ones(102,101,3,100))
+flt = CudaArray(ones(25,15,3,99))
+dst = CudaArray(ones(cudnnGetConvolutionNdForwardOutputDim(src, flt)))
 @test cudnnGetConvolutionForwardAlgorithm(src, flt, dst; preference=CUDNN_CONVOLUTION_FWD_NO_WORKSPACE) == CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM
 @test cudnnGetConvolutionForwardAlgorithm(src, flt, dst; preference=CUDNN_CONVOLUTION_FWD_PREFER_FASTEST) == CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM
 @test cudnnGetConvolutionForwardAlgorithm(src, flt, dst; preference=CUDNN_CONVOLUTION_FWD_SPECIFY_WORKSPACE_LIMIT) == CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM
@@ -314,8 +316,8 @@ using CUDNN: cudnnGetConvolutionForwardWorkspaceSize
 # @show cudnnGetConvolutionForwardWorkspaceSize(src, flt, dst; algorithm=CUDNN_CONVOLUTION_FWD_ALGO_DIRECT)
 
 using CUDNN: cudnnConvolutionForward
-x = reshape(Float64[1:20], 5, 4, 1, 1); tx = Tensor(x)
-w = reshape(Float64[1:4], 2, 2, 1, 1); tw = Filter(w)
+x = reshape(Float64[1:20], 5, 4, 1, 1); tx = CudaArray(x)
+w = reshape(Float64[1:4], 2, 2, 1, 1); tw = CudaArray(w)
 @test squeeze(to_host(cudnnConvolutionForward(tx, tw)),(3,4)) == [29 79 129; 39 89 139; 49 99 149; 59 109 159.]
 
 using CUDNN: ConvolutionDescriptor, CUDNN_CROSS_CORRELATION
@@ -323,10 +325,10 @@ cd = ConvolutionDescriptor(mode=CUDNN_CROSS_CORRELATION)
 @test squeeze(to_host(cudnnConvolutionForward(tx, tw; convDesc=cd)),(3,4)) == [51 101 151;61 111 161;71 121 171;81 131 181.]
 
 using CUDNN: cudnnConvolutionBackwardBias, cudnnConvolutionBackwardFilter, cudnnConvolutionBackwardData
-x = rand(5,4,3,2); tx = Tensor(x)
-w = rand(2,2,3,4); tw = Filter(w)
+x = rand(5,4,3,2); tx = CudaArray(x)
+w = rand(2,2,3,4); tw = CudaArray(w)
 ty = cudnnConvolutionForward(tx, tw)
-dy = rand(size(ty)); tdy = Tensor(dy)
+dy = rand(size(ty)); tdy = CudaArray(dy)
 @test epseq(to_host(cudnnConvolutionBackwardBias(tdy)), sum(dy,(1,2,4)))
 
 # TODO: put a more meaningful test here...
@@ -337,8 +339,8 @@ tdw = zeros(tw)
 @test size(cudnnConvolutionBackwardFilter(tx, tdy, tdw)) == size(w)
 
 # Testing correspondence with conv2
-x = rand(5,4); tx = Tensor(reshape(x, (5,4,1,1)))
-w = rand(3,3); tw = Filter(reshape(w, (3,3,1,1)))
+x = rand(5,4); tx = CudaArray(reshape(x, (5,4,1,1)))
+w = rand(3,3); tw = CudaArray(reshape(w, (3,3,1,1)))
 padding=map(x->x-1,size(w))
 @test epseq(squeeze(to_host(cudnnConvolutionForward(tx, tw; convDesc=ConvolutionDescriptor(padding=padding))),(3,4)), conv2(x,w))
 @test epseq(squeeze(to_host(conv2(tx, tw)), (3,4)), conv2(x,w))
