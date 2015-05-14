@@ -2,6 +2,7 @@ module CUDNN
 using CUDArt
 
 export cudnnTransformTensor, cudnnAddTensor, cudnnSetTensor, cudnnScaleTensor
+export CUDNN_ADD_IMAGE, CUDNN_ADD_SAME_HW, CUDNN_ADD_FEATURE_MAP, CUDNN_ADD_SAME_CHW, CUDNN_ADD_SAME_C, CUDNN_ADD_FULL_TENSOR
 export cudnnActivationForward, cudnnActivationBackward
 export CUDNN_ACTIVATION_SIGMOID, CUDNN_ACTIVATION_RELU, CUDNN_ACTIVATION_TANH
 export cudnnSoftmaxForward, cudnnSoftmaxBackward
@@ -48,7 +49,7 @@ end
 
 function cudnnAddTensor(bias::CudaArray, src::CudaArray;
                         handle=cudnnHandle, alpha=1.0, beta=1.0, mode=CUDNN_ADD_SAME_C)
-    cudnnAddTensor(handle, mode, cptr(alpha,bias), TD(bias), bias, cptr(beta,src), TD(src), src)
+    cudnnAddTensor(handle, mode, cptr(alpha,bias), TD(bias,4), bias, cptr(beta,src), TD(src,4), src)
     return src
 end
 
@@ -72,8 +73,8 @@ end
 function cudnnActivationForward(src::CudaArray, dest::CudaArray=src; handle=cudnnHandle, 
                                 mode=CUDNN_ACTIVATION_RELU, alpha=1.0, beta=0.0)
     cudnnActivationForward(handle, mode, 
-                           cptr(alpha,src), TD(src), src, 
-                           cptr(beta,dest), TD(dest), dest)
+                           cptr(alpha,src), TD(src,4), src, 
+                           cptr(beta,dest), TD(dest,4), dest)
     return dest
 end
 
@@ -87,10 +88,10 @@ end
 function cudnnActivationBackward(src::CudaArray, srcDiff::CudaArray, dest::CudaArray=src, destDiff::CudaArray=srcDiff; 
                                  handle=cudnnHandle, mode=CUDNN_ACTIVATION_RELU, alpha=1.0, beta=0.0) 
     cudnnActivationBackward(handle, mode, 
-                            cptr(alpha,src), TD(src), src, 
-                            TD(srcDiff), srcDiff, 
-                            TD(dest), dest,
-                            cptr(beta,destDiff), TD(destDiff), destDiff)
+                            cptr(alpha,src), TD(src,4), src, 
+                            TD(srcDiff,4), srcDiff, 
+                            TD(dest,4), dest,
+                            cptr(beta,destDiff), TD(destDiff,4), destDiff)
     return destDiff
 end
 
@@ -395,7 +396,7 @@ Base.conv2(src::CudaArray, filter::CudaArray, dest=nothing)=cudnnConvolutionForw
 # of src entries for every channel.
 function cudnnConvolutionBackwardBias(src::CudaArray, dest::CudaArray=CudaArray(eltype(src),(1,1,size(src,3),1));
                                       handle=cudnnHandle, alpha=1.0, beta=0.0)
-    cudnnConvolutionBackwardBias(handle,cptr(alpha,src),TD(src),src,cptr(beta,dest),TD(dest),dest)
+    cudnnConvolutionBackwardBias(handle,cptr(alpha,src),TD(src,4),src,cptr(beta,dest),TD(dest,4),dest)
     return dest
 end
 
@@ -443,23 +444,8 @@ convert(::Type{cudnnFilterDescriptor_t}, fd::FD)=fd.ptr
 # mmul y: (1,1,K,N)
 # mmul b: (1,1,K,1)
 
-function TD(a::CudaArray)
-    # size and strides in Julia are in column-major format, e.g. (W,H,C,N)
-    # most cudnn ops still work only on 4-D arrays
-    # so we map to sz and st, the 4-D row-major size and stride
-    if ndims(a)==1              # 1D vector, (bias or single inst)
-        sz = Cint[1,size(a,1),1,1]
-        st = Cint[1,stride(a,1),1,1]
-    elseif ndims(a)==2          # 2D mmul x, mmul w
-        sz = Cint[reverse(size(a))..., 1, 1]
-        st = Cint[reverse(strides(a))..., 1, 1]
-    elseif ndims(a)==3          # 1D convolution: X,C,N
-        sz = Cint[reverse(size(a))..., 1]
-        st = Cint[reverse(strides(a))..., 1]
-    else                        # N-D convolution: W,H,...,C,N
-        sz = Cint[reverse(size(a))...]
-        st = Cint[reverse(strides(a))...]
-    end
+function TD(a::CudaArray, dims=ndims(a))
+    (sz, st) = tensorsize(a, dims)
     d = cudnnTensorDescriptor_t[0]
     cudnnCreateTensorDescriptor(d)
     cudnnSetTensorNdDescriptor(d[1], cudnntype(a), length(sz), sz, st)
@@ -468,12 +454,12 @@ function TD(a::CudaArray)
     this
 end
 
-function FD(a::CudaArray)
+function FD(a::CudaArray, dims=ndims(a))
     # The only difference of a FilterDescriptor is no strides.
-    @assert ndims(a) > 2
+    (sz, st) = tensorsize(a, dims)
     d = cudnnFilterDescriptor_t[0]
     cudnnCreateFilterDescriptor(d)
-    cudnnSetFilterNdDescriptor(d[1], cudnntype(a), ndims(a), Cint[reverse(size(a))...])
+    cudnnSetFilterNdDescriptor(d[1], cudnntype(a), length(sz), sz)
     this = FD(d[1])
     finalizer(this, free)
     this
@@ -483,6 +469,31 @@ function cudnntype(a)
     (eltype(a) == Float64 ? CUDNN_DATA_DOUBLE :
      eltype(a) == Float32 ? CUDNN_DATA_FLOAT :
      error("Supported data types are Float32 and Float64"))
+end
+
+# size and strides in Julia are in column-major format, e.g. (W,H,C,N)
+# whereas cudnn uses row-major, e.g. NCHW
+# most cudnn ops still work only on 4-D arrays
+# so we may need to modify size and strides
+
+function tensorsize(a, dims)
+    sz = Cint[reverse(size(a))...]
+    st = Cint[reverse(strides(a))...]
+    if length(sz) == 1 < dims
+        unshift!(sz, 1)
+        unshift!(st, 1)
+    end
+    while length(sz) < dims
+        push!(sz, 1)
+        push!(st, 1)
+    end
+    while length(sz) > dims
+        d = pop!(sz)
+        sz[length(sz)] *= d
+        pop!(st)
+        st[length(st)] = 1
+    end
+    (sz, st)
 end
 
 # This is missing from CUDArt:
