@@ -45,7 +45,6 @@ function cudnnTransformTensor(alpha::Number, src::CudaArray, beta::Number=0, des
 end
 
 # Refer to cudnn doc to see what different add modes do
-# TODO: This seems buggy, intermittent crashes?
 
 function cudnnAddTensor(bias::CudaArray, src::CudaArray;
                         handle=cudnnHandle, alpha=1.0, beta=1.0, mode=CUDNN_ADD_SAME_C)
@@ -198,8 +197,7 @@ function PoolingDescriptor(dims; padding=map(x->0,dims), stride=dims, mode=CUDNN
     @assert length(dims) == length(padding) == length(stride)
     pd = cudnnPoolingDescriptor_t[0]
     cudnnCreatePoolingDescriptor(pd)
-    # TODO: shouldn't we reverse these dims?
-    cudnnSetPoolingNdDescriptor(pd[1],mode,length(dims),Cint[dims...],Cint[padding...],Cint[stride...])
+    cudnnSetPoolingNdDescriptor(pd[1],mode,length(dims),Cint[reverse(dims)...],Cint[reverse(padding)...],Cint[reverse(stride)...])
     this = PoolingDescriptor(pd[1], dims, padding, stride, mode)
     finalizer(this, free)
     this
@@ -267,10 +265,8 @@ function ConvolutionDescriptor(; padding=(0,0), stride=map(x->1,padding), upscal
     # @assert length(padding) == length(stride) == length(upscale)
     cd = cudnnConvolutionDescriptor_t[0]
     cudnnCreateConvolutionDescriptor(cd)
-    # TODO: shouldn't these Cint's be reversed?
-    cudnnSetConvolutionNdDescriptor(cd[1],length(padding),Cint[padding...],Cint[stride...],Cint[upscale...],mode)
+    cudnnSetConvolutionNdDescriptor(cd[1],length(padding),Cint[reverse(padding)...],Cint[reverse(stride)...],Cint[reverse(upscale)...],mode)
     this = ConvolutionDescriptor(cd[1], padding, stride, upscale, mode)
-    # TODO: find out why this does not work.  Empty initializer is the only difference from PoolingDescriptor.
     finalizer(this, free)
     this
 end
@@ -455,9 +451,12 @@ function TD(a::CudaArray)
         sz = Cint[1,size(a,1),1,1]
         st = Cint[1,stride(a,1),1,1]
     elseif ndims(a)==2          # 2D mmul x, mmul w
-        sz = Cint[size(a,2), size(a,1), 1, 1]
-        st = Cint[stride(a,2), stride(a,1), 1, 1]
-    else                        # any other array, 3D?
+        sz = Cint[reverse(size(a))..., 1, 1]
+        st = Cint[reverse(strides(a))..., 1, 1]
+    elseif ndims(a)==3          # 1D convolution: X,C,N
+        sz = Cint[reverse(size(a))..., 1]
+        st = Cint[reverse(strides(a))..., 1]
+    else                        # N-D convolution: W,H,...,C,N
         sz = Cint[reverse(size(a))...]
         st = Cint[reverse(strides(a))...]
     end
