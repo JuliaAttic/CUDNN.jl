@@ -117,8 +117,8 @@ function cudnnSoftmaxForward(src::CudaArray, dest::CudaArray=src;
                              mode=CUDNN_SOFTMAX_MODE_INSTANCE, # or CUDNN_SOFTMAX_MODE_CHANNEL
                              alpha=1.0, beta=0.0)
     cudnnSoftmaxForward(handle, algorithm, mode,
-                        cptr(alpha, src), TD(src), src,
-                        cptr(beta, dest), TD(dest), dest)
+                        cptr(alpha, src), TD(src,4), src,
+                        cptr(beta, dest), TD(dest,4), dest)
     return dest
 end
 
@@ -153,9 +153,9 @@ function cudnnSoftmaxBackward(src::CudaArray, srcDiff::CudaArray, destDiff::Cuda
                               mode=CUDNN_SOFTMAX_MODE_INSTANCE, # or CUDNN_SOFTMAX_MODE_CHANNEL
                               alpha=1.0, beta=0.0)
     cudnnSoftmaxBackward(handle, algorithm, mode,
-                         cptr(alpha, src), TD(src), src,
-                         TD(srcDiff), srcDiff,
-                         cptr(beta, destDiff), TD(destDiff), destDiff)
+                         cptr(alpha, src), TD(src,4), src,
+                         TD(srcDiff,4), srcDiff,
+                         cptr(beta, destDiff), TD(destDiff,4), destDiff)
     return destDiff
 end
 
