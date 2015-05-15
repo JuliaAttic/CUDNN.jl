@@ -40,8 +40,8 @@ atexit(()->cudnnDestroy(cudnnHandle))
 function cudnnTransformTensor(alpha::Number, src::CudaArray, beta::Number=0, dest::CudaArray=ones(src); 
                               handle=cudnnHandle)
     cudnnTransformTensor(handle, 
-                         cptr(alpha,src), TD(src), src, 
-                         cptr(beta,dest), TD(dest), dest)
+                         cptr(alpha,src), TD(src,4), src, 
+                         cptr(beta,dest), TD(dest,4), dest)
     return dest
 end
 
@@ -56,14 +56,14 @@ end
 # src .= value
 
 function cudnnSetTensor(src::CudaArray, value::Number; handle=cudnnHandle)
-    cudnnSetTensor(handle, TD(src), src, cptr(value,src))
+    cudnnSetTensor(handle, TD(src,4), src, cptr(value,src))
     return src
 end
 
 # src .*= alpha
 
 function cudnnScaleTensor(src::CudaArray, alpha::Number; handle=cudnnHandle)
-    cudnnScaleTensor(handle, TD(src), src, cptr(alpha,src))
+    cudnnScaleTensor(handle, TD(src,4), src, cptr(alpha,src))
     return src
 end
 
@@ -145,7 +145,7 @@ end
 # dividing dJ/dyi with 2 for srcDiff to get the correct derivatives.
 # You should also divide all dJ/dyi by the number of instances (N) to
 # make learningRate specify the same step size regardless of batch
-# size.
+# size.  (Or maybe one should divide the loss J instead).
 
 function cudnnSoftmaxBackward(src::CudaArray, srcDiff::CudaArray, destDiff::CudaArray=srcDiff;
                               handle=cudnnHandle,
