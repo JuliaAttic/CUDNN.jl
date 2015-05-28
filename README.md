@@ -7,22 +7,30 @@
 ## Overview
 
 This is a Julia wrapper for the NVIDIA cuDNN GPU accelerated deep
-learning library.  It consists of a low level interface and a high
-level interface.  
+learning library which provides convolution, pooling, and various
+activation functions.  The Julia implementation consists of a low
+level interface and a high level interface.
 
 The low level interface wraps each function from libcudnn.so in a
-Julia function in libcudnn.jl and each data type from cudnn.h in a
-Julia datatype in types.jl.  These were generated semi-automatically
-using [Clang](https://github.com/ihnorton/Clang.jl) and are documented
-in the [cuDNN Library User Guide](https://developer.nvidia.com/cuDNN).
+Julia function in
+[libcudnn.jl](https://github.com/denizyuret/CUDNN.jl/blob/master/src/libcudnn.jl)
+and each data type from cudnn.h in a Julia datatype in
+[types.jl](https://github.com/denizyuret/CUDNN.jl/blob/master/src/types.jl).
+These were generated semi-automatically using
+[Clang](https://github.com/ihnorton/Clang.jl).  Documentation about
+the low level functions and types can be found in the [cuDNN Library
+User Guide](https://developer.nvidia.com/cuDNN).
 
-For the high level interface defined in CUDNN.jl, I kept the original
-names from the C library and provided more convenient type signatures,
-return values, and keyword arguments with reasonable defaults.  I will
-mostly describe the high level interface below.  All low level
-arguments from the C library are supported by the high level interface
-using keyword arguments, however only the most useful ones are
-documented below.  Please see CUDNN.jl for the complete interface.
+The high level interface is defined in
+[CUDNN.jl](https://github.com/denizyuret/CUDNN.jl/blob/master/src/CUDNN.jl).
+I kept the original names from the C library and provided more
+convenient type signatures, return values, and keyword arguments with
+reasonable defaults.  I will mostly describe the high level interface
+below.  All low level arguments from the C library are supported by
+the high level interface using keyword arguments, however only the
+most useful ones are documented below.  Please see
+[CUDNN.jl](https://github.com/denizyuret/CUDNN.jl/blob/master/src/CUDNN.jl)
+for the complete interface.
 
 ## Types
 
