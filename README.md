@@ -53,8 +53,8 @@ maps respectively.
 
 ## Convolution
 
-`cudnnConvolutionForward(src::CudaArray, filter::CudaArray,
-[dest::CudaArray])` This function computes and returns dest, the
+`cudnnConvolutionForward(src::AbstractCudaArray, filter::AbstractCudaArray,
+[dest::AbstractCudaArray])` This function computes and returns dest, the
 convolution of src with filter under default settings (no padding,
 stride=1).  For more convolution options please see
 ConvolutionDescriptor in CUDNN.jl and the C library documentation.
@@ -70,25 +70,25 @@ vector, * denotes convolution, and + denotes broadcast addition.  J is
 the loss function and dJ/dy is the gradient of the loss function with
 respect to y.
 
-`cudnnConvolutionBackwardFilter(src::CudaArray, diff::CudaArray,
-grad::CudaArray)` Given src=x and diff=dJ/dy, this function computes
+`cudnnConvolutionBackwardFilter(src::AbstractCudaArray, diff::AbstractCudaArray,
+grad::AbstractCudaArray)` Given src=x and diff=dJ/dy, this function computes
 and returns grad=dJ/dw.
 
-`cudnnConvolutionBackwardData(filter::CudaArray, diff::CudaArray,
-grad::CudaArray)` Given filter=w and diff=dJ/dy, this function
+`cudnnConvolutionBackwardData(filter::AbstractCudaArray, diff::AbstractCudaArray,
+grad::AbstractCudaArray)` Given filter=w and diff=dJ/dy, this function
 computes and returns grad=dJ/dx.
 
 
 ## Bias
 
-`cudnnAddTensor(bias::CudaArray, src::CudaArray)` adds the values in
+`cudnnAddTensor(bias::AbstractCudaArray, src::AbstractCudaArray)` adds the values in
 the bias tensor to the src tensor.  The dimensions n,w,h of the bias
 tensor must be 1 and the dimension c of the two tensors must match.
 There are other modes of operation specified by the mode keyword
 argument documented in the C library reference.  The default mode is
 compatible with `cudnnConvolutionBackwardBias`.
 
-`cudnnConvolutionBackwardBias(src::CudaArray, [dest::CudaArray])`
+`cudnnConvolutionBackwardBias(src::AbstractCudaArray, [dest::AbstractCudaArray])`
 Given src=dJ/dy this function computes and returns dest=dJ/db.  It is
 assumed that there is a single scalar bias for each channel, i.e. the
 same number is added to every pixel of every image for that channel
@@ -115,23 +115,23 @@ differ on whether or not they include the zero padded entries in the
 averages.  I think CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING
 implementation is currently buggy so don't use it.
 
-`cudnnPoolingForward(pd::PoolingDescriptor, src::CudaArray,
-dest::CudaArray)` Performs the pooling operation specified by pd on
+`cudnnPoolingForward(pd::PoolingDescriptor, src::AbstractCudaArray,
+dest::AbstractCudaArray)` Performs the pooling operation specified by pd on
 src, writes the result to dest and returns dest.  The C and N
 dimensions of src and dest should match.  If a src dimension (other
 than C,N) is x, and the corresponding pooling area dimension is d,
 padding is p, stride is s, then the corresponding dest dimension
 should be y=1+ceil((x+2p-d)/s).
 
-`cudnnPoolingBackward(pd::PoolingDescriptor, src::CudaArray,
-srcDiff::CudaArray, dest::CudaArray, destDiff::CudaArray)` If x=dest
+`cudnnPoolingBackward(pd::PoolingDescriptor, src::AbstractCudaArray,
+srcDiff::AbstractCudaArray, dest::AbstractCudaArray, destDiff::AbstractCudaArray)` If x=dest
 is the forward input to the pooling operation specified by pd, y=src
 is the forward output, and dJ/dy=srcDiff is the loss gradient, this
 function computes and returns dJ/dx=destDiff.
 
 ## Activation Functions
 
-`cudnnActivationForward(src::CudaArray, [dest::CudaArray])` applies a
+`cudnnActivationForward(src::AbstractCudaArray, [dest::AbstractCudaArray])` applies a
 neural network activation function (relu by default) to src and writes
 the result to dest.  dest is optional and the operation is performed
 in-place on src if dest is not specified.  The type of activation
@@ -139,8 +139,8 @@ function can be specified using the `mode` keyword argument.
 Currently supported modes are `CUDNN_ACTIVATION_RELU`,
 `CUDNN_ACTIVATION_SIGMOID`, and `CUDNN_ACTIVATION_TANH`.
 
-`cudnnActivationBackward(src::CudaArray, srcDiff::CudaArray,
-dest::CudaArray, [destDiff::CudaArray])` computes the loss gradient of
+`cudnnActivationBackward(src::AbstractCudaArray, srcDiff::AbstractCudaArray,
+dest::AbstractCudaArray, [destDiff::AbstractCudaArray])` computes the loss gradient of
 the input to the activation function from the gradient of the output
 of the activation function.  If y=f(x) where f is the forward
 activation function and J is loss, the arguments would be src=y,
@@ -149,7 +149,7 @@ srcDiff will be overwritten if destDiff is not specified.  The default
 activation function is relu but others can be specified using the
 `mode` keyword argument similar to `cudnnActivationForward`.
 
-`cudnnSoftmaxForward(src::CudaArray, [dest::CudaArray])` treats the
+`cudnnSoftmaxForward(src::AbstractCudaArray, [dest::AbstractCudaArray])` treats the
 entries in src as unnormalized log probabilities and produces
 normalized probabilities in dest.  The src and dest tensors have the
 same dimensionality.  If dest is not specified, src is written
@@ -166,8 +166,8 @@ i.e. `dest=exp(src)./sum(exp(src), 3)` after which
 where size(src) is (1,1,C,N), giving unnormalized probabilities for N
 instances and C classes both modes would compute the same answer.
 
-`cudnnSoftmaxBackward(src::CudaArray, srcDiff::CudaArray,
-[destDiff::CudaArray])` Let us assume x was the input (unnormalized
+`cudnnSoftmaxBackward(src::AbstractCudaArray, srcDiff::AbstractCudaArray,
+[destDiff::AbstractCudaArray])` Let us assume x was the input (unnormalized
 log probabilities) to SoftmaxForward and y was the output (normalized
 log probabilities).  SoftmaxBackward takes src=y, srcDiff=dJ/dy, and
 computes destDiff=dJ/dx.  The softmax loss function is J=-log(y1)
@@ -182,16 +182,16 @@ size is not effected by the batch size.
 
 ## Other Tensor Functions
 
-`cudnnTransformTensor(alpha::Number, src::CudaArray, beta::Number,
-dest::CudaArray)` computes alpha * src + beta * dest and places the
+`cudnnTransformTensor(alpha::Number, src::AbstractCudaArray, beta::Number,
+dest::AbstractCudaArray)` computes alpha * src + beta * dest and places the
 result in dest.  Both beta and dest are optional and are set to 0 and
 ones(src) respectively if not specified.
 
-`cudnnSetTensor(src::CudaArray, value::Number)` sets each element of
+`cudnnSetTensor(src::AbstractCudaArray, value::Number)` sets each element of
 the src tensor to value.  `fill!(src, value)` is defined to call this
 function.
 
-`cudnnScaleTensor(src::CudaArray, alpha::Number)` scales each element
+`cudnnScaleTensor(src::AbstractCudaArray, alpha::Number)` scales each element
 of the src tensor with alpha.  `scale!(src, alpha)` is defined to call
 this function.
 

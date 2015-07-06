@@ -125,7 +125,7 @@ mytanh(y,dy,dx)=(for i=1:length(dx); dx[i]=dy[i]*(1.0+y[i])*(1.0-y[i]); end; dx)
 using CUDNN: cudnnSoftmaxForward, CUDNN_SOFTMAX_MODE_CHANNEL, CUDNN_SOFTMAX_MODE_INSTANCE
 x = (rand(5,4,3,2) - 0.5)
 tx = CudaArray(x)
-Base.zeros(a::CudaArray)=cudnnSetTensor(similar(a), zero(eltype(a)))
+Base.zeros(a::AbstractCudaArray)=cudnnSetTensor(similar(a), zero(eltype(a)))
 ty = zeros(tx)
 @test epseq(to_host(cudnnSoftmaxForward(tx, ty; mode=CUDNN_SOFTMAX_MODE_INSTANCE)), exp(x)./sum(exp(x), (1,2,3)))
 @test epseq(to_host(cudnnSoftmaxForward(tx, ty; mode=CUDNN_SOFTMAX_MODE_CHANNEL)), exp(x)./sum(exp(x), 3))
