@@ -1,4 +1,5 @@
 module CUDNN
+using Compat
 using CUDArt
 
 export cudnnTransformTensor, cudnnAddTensor, cudnnSetTensor, cudnnScaleTensor
@@ -15,7 +16,7 @@ export cudnnGetConvolutionNdForwardOutputDim, cudnnGetPoolingNdForwardOutputDim,
 import Base: convert, conv2, strides
 import CUDArt: free
 
-const libcudnn = find_library(["libcudnn"])
+const libcudnn = Libdl.find_library(["libcudnn"])
 isempty(libcudnn) && error("CUDNN library cannot be found")
 
 # These are semi-automatically generated using Clang with wrap_cudnn.jl:
