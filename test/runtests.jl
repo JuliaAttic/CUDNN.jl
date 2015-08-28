@@ -2,7 +2,7 @@ using Base.Test
 using CUDArt
 
 # Uncomment this if you want lots of messages:
-Base.Test.default_handler(r::Base.Test.Success) = info("$(r.expr)")
+# Base.Test.default_handler(r::Base.Test.Success) = info("$(r.expr)")
 
 # See which operations support which dimensions:
 function testdims()
@@ -152,7 +152,7 @@ dx = copy(y); dx[c] .-= 1
 # Discovering what pooling does:
 # using CUDNN: cudnnPoolingDescriptor_t, cudnnCreatePoolingDescriptor, cudnnSetPooling2dDescriptor
 # # x = rand(5,4,1,1)
-# x = reshape(Float64[1:20], 5, 4, 1, 1)
+# x = reshape(Float64[1:20;], 5, 4, 1, 1)
 # tx = CudaArray(x)
 # pdptr = Array(cudnnPoolingDescriptor_t, 1)
 # cudnnCreatePoolingDescriptor(pdptr)
@@ -175,7 +175,7 @@ pd = PoolingDescriptor((3,3); padding=(2,2), stride=(1,1), mode=CUDNN_POOLING_MA
 # free(pd)
 
 using CUDNN: cudnnPoolingForward, cudnnPoolingBackward, cudnnGetPoolingNdForwardOutputDim
-x = reshape(Float64[1:20], 5, 4, 1, 1); tx = CudaArray(x)
+x = reshape(Float64[1:20;], 5, 4, 1, 1); tx = CudaArray(x)
 
 # 1.0   6.0  11.0  16.0
 # 2.0   7.0  12.0  17.0
@@ -197,7 +197,7 @@ pd3 = PoolingDescriptor((3,3); padding=(0,0), stride=(1,1), mode=CUDNN_POOLING_A
 @test cudnnGetPoolingNdForwardOutputDim(pd3, tx) == (3,2,1,1)
 @test squeeze(to_host(cudnnPoolingForward(pd3, tx, ty3)),(3,4)) == [7 12; 8 13; 9 14.]
 
-dy1 = reshape(Float64[1:6], 3, 2, 1, 1); 
+dy1 = reshape(Float64[1:6;], 3, 2, 1, 1); 
 tdy1 = CudaArray(dy1)
 tdx1 = zeros(tx)
 @test squeeze(to_host(cudnnPoolingBackward(pd1, ty1, tdy1, tx, tdx1)),(3,4)) == [0 0 0 0;0 0 0 0;0 0 1 4;0 0 2 5;0 0 3 6.]
@@ -224,7 +224,7 @@ cudnnPoolingForward(pd6, tx, ty6)
 # dump( squeeze(to_host(cudnnPoolingForward(pd6, tx, ty6)),(3,4)) )
 # dump( [16/4 39/6 69/6 56/4; 27/6 7 12 87/6; 33/6 8 13 93/6; 39/6 9 14 99/6; 28/4 57/6 87/6 68/4] )
 
-dy4 = reshape(Float64[1:20], 5, 4, 1, 1); 
+dy4 = reshape(Float64[1:20;], 5, 4, 1, 1); 
 tdy4 = CudaArray(dy4)
 tdx4 = zeros(tx)
 @test squeeze(to_host(cudnnPoolingBackward(pd4, ty4, tdy4, tx, tdx4)),(3,4)) == [0 0 0 0;0 1 6 11+16;0 2 7 12+17;0 3 8 13+18;0 4+5 9+10 14+15+19+20.]
@@ -252,7 +252,7 @@ pd8 = PoolingDescriptor((3,3); padding=(1,1), stride=(2,2), mode=CUDNN_POOLING_A
 # dump( [16/4 69/6 33/2; 33/6 13 54/3; 28/4 87/6 39/2] )
 
 # 3D pooling not supported:
-# x10 = reshape(Float64[1:60], 5, 4, 3, 1, 1); tx10 = CudaArray(x10)
+# x10 = reshape(Float64[1:60;], 5, 4, 3, 1, 1); tx10 = CudaArray(x10)
 # ty10 = CudaArray(zeros(3, 2, 1, 1, 1))
 # pd10 = PoolingDescriptor((3,3,3); padding=(0,0,0), stride=(1,1,1), mode=CUDNN_POOLING_MAX)
 # @show cudnnPoolingForward(pd10, tx10, ty10)
@@ -316,8 +316,8 @@ using CUDNN: cudnnGetConvolutionForwardWorkspaceSize
 # @show cudnnGetConvolutionForwardWorkspaceSize(src, flt, dst; algorithm=CUDNN_CONVOLUTION_FWD_ALGO_DIRECT)
 
 using CUDNN: cudnnConvolutionForward
-x = reshape(Float64[1:20], 5, 4, 1, 1); tx = CudaArray(x)
-w = reshape(Float64[1:4], 2, 2, 1, 1); tw = CudaArray(w)
+x = reshape(Float64[1:20;], 5, 4, 1, 1); tx = CudaArray(x)
+w = reshape(Float64[1:4;], 2, 2, 1, 1); tw = CudaArray(w)
 @test squeeze(to_host(cudnnConvolutionForward(tx, tw)),(3,4)) == [29 79 129; 39 89 139; 49 99 149; 59 109 159.]
 
 using CUDNN: ConvolutionDescriptor, CUDNN_CROSS_CORRELATION

@@ -13,7 +13,7 @@ export cudnnConvolutionBackwardBias, cudnnConvolutionBackwardFilter, cudnnConvol
 export CUDNN_POOLING_MAX, CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING, CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING
 export cudnnGetConvolutionNdForwardOutputDim, cudnnGetPoolingNdForwardOutputDim, cudnnGetConvolutionForwardWorkspaceSize
 
-import Base: convert, conv2, strides
+import Base: unsafe_convert, conv2, strides
 import CUDArt: free
 
 const libcudnn = Libdl.find_library(["libcudnn"])
@@ -206,7 +206,7 @@ function PoolingDescriptor(dims; padding=map(x->0,dims), stride=dims, mode=CUDNN
 end
 
 free(pd::PoolingDescriptor)=cudnnDestroyPoolingDescriptor(pd.ptr)
-convert(::Type{cudnnPoolingDescriptor_t}, pd::PoolingDescriptor)=pd.ptr
+unsafe_convert(::Type{cudnnPoolingDescriptor_t}, pd::PoolingDescriptor)=pd.ptr
 
 function cudnnPoolingForward(pd::PoolingDescriptor, src::AbstractCudaArray, dest::AbstractCudaArray; 
                              handle=cudnnHandle, alpha=1.0, beta=0.0)
@@ -274,7 +274,7 @@ function ConvolutionDescriptor(; padding=(0,0), stride=map(x->1,padding), upscal
 end
 
 free(cd::ConvolutionDescriptor)=cudnnDestroyConvolutionDescriptor(cd.ptr)
-convert(::Type{cudnnConvolutionDescriptor_t}, cd::ConvolutionDescriptor)=cd.ptr
+unsafe_convert(::Type{cudnnConvolutionDescriptor_t}, cd::ConvolutionDescriptor)=cd.ptr
 
 # Read info from gpu for debugging
 function cudnnGetConvolutionNdDescriptor(cd::ConvolutionDescriptor)
@@ -344,7 +344,7 @@ function cudnnGetConvolutionForwardAlgorithm(src::AbstractCudaArray, filter::Abs
                                              handle=cudnnHandle,
                                              convDesc=defaultConvolutionDescriptor,
                                              preference=CUDNN_CONVOLUTION_FWD_PREFER_FASTEST,
-                                             memoryLimitInbytes=int(5e9))
+                                             memoryLimitInbytes=5*10^9)
     algo = cudnnConvolutionFwdAlgo_t[0]
     cudnnGetConvolutionForwardAlgorithm(handle,TD(src),FD(filter),convDesc,TD(dest),preference,memoryLimitInbytes,algo)
     return algo[1]
@@ -355,7 +355,7 @@ function cudnnGetConvolutionForwardWorkspaceSize(src::AbstractCudaArray, filter:
                                                  algorithm=CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM)
     sizeInBytes = Csize_t[0]
     cudnnGetConvolutionForwardWorkspaceSize(handle,TD(src),FD(filter),convDesc,TD(dest),algorithm,sizeInBytes)
-    return int(sizeInBytes[1])
+    return Int(sizeInBytes[1])
 end
 
 function cudnnConvolutionForward(src::AbstractCudaArray, filter::AbstractCudaArray, dest=nothing;
@@ -432,8 +432,8 @@ type TD; ptr; end
 type FD; ptr; end
 free(td::TD)=cudnnDestroyTensorDescriptor(td.ptr)
 free(fd::FD)=cudnnDestroyFilterDescriptor(fd.ptr)
-convert(::Type{cudnnTensorDescriptor_t}, td::TD)=td.ptr
-convert(::Type{cudnnFilterDescriptor_t}, fd::FD)=fd.ptr
+unsafe_convert(::Type{cudnnTensorDescriptor_t}, td::TD)=td.ptr
+unsafe_convert(::Type{cudnnFilterDescriptor_t}, fd::FD)=fd.ptr
 
 # CUDNN/Caffe sizes for various arrays in column-major notation:
 # conv x: (W,H,C,N): W,H=image size, C=channels, N=instances
