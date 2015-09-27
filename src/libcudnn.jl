@@ -7,7 +7,7 @@ function cudnnGetVersion()
 end
 
 function cudnnGetErrorString(status)
-    bytestring(ccall((:cudnnGetErrorString,libcudnn),Ptr{Uint8},(cudnnStatus_t,),status))
+    bytestring(ccall((:cudnnGetErrorString,libcudnn),Ptr{UInt8},(cudnnStatus_t,),status))
 end
 
 # error handling function
