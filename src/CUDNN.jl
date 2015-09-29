@@ -20,9 +20,37 @@ import CUDArt: free
 const libcudnn = Libdl.find_library(["libcudnn"])
 isempty(libcudnn) && error("CUDNN library cannot be found")
 
+# This is missing from CUDArt:
+type cudaStream; end
+typealias cudaStream_t Ptr{cudaStream}
+
+# error handling function
+function cudnnCheck(status)
+    if status == CUDNN_STATUS_SUCCESS
+        return nothing
+    end
+    # Because try/finally may disguise the source of the problem,
+    # let's show a backtrace here
+    warn("CUDNN error triggered from:")
+    Base.show_backtrace(STDOUT, backtrace())
+    println()
+    throw(cudnnGetErrorString(status))
+end
+
 # These are semi-automatically generated using Clang with wrap_cudnn.jl:
 include("types.jl")
 include("libcudnn.jl")
+
+# Conversion between Julia and CUDNN datatypes
+cudnnDataType(::AbstractCudaArray{Float16})=CUDNN_DATA_HALF
+cudnnDataType(::AbstractCudaArray{Float32})=CUDNN_DATA_FLOAT
+cudnnDataType(::AbstractCudaArray{Float64})=CUDNN_DATA_DOUBLE
+cudnnDataType(::Type{Float16})=CUDNN_DATA_HALF
+cudnnDataType(::Type{Float32})=CUDNN_DATA_FLOAT
+cudnnDataType(::Type{Float64})=CUDNN_DATA_DOUBLE
+juliaDataType(a)=(a==CUDNN_DATA_HALF ? Float16 :
+                  a==CUDNN_DATA_FLOAT ? Float32 :
+                  a==CUDNN_DATA_DOUBLE ? Float64 : error())
 
 # Setup default cudnn handle
 cudnnHandlePtr = cudnnHandle_t[0]
@@ -260,16 +288,25 @@ function cudnnPoolingBackward(pd::PoolingDescriptor, src::AbstractCudaArray, src
 end
 
 
-type ConvolutionDescriptor; ptr; padding; stride; upscale; mode; end
+type ConvolutionDescriptor; ptr; padding; stride; upscale; mode; datatype; end
 
 # TODO: accept single number args for padding etc.
-function ConvolutionDescriptor(; padding=(0,0), stride=map(x->1,padding), upscale=map(x->1,padding), mode=CUDNN_CONVOLUTION)
+function ConvolutionDescriptor(; padding=(0,0), 
+                               stride=map(x->1,padding), 
+                               upscale=map(x->1,padding), 
+                               mode=CUDNN_CONVOLUTION,
+                               datatype=Float64)
     @assert in(mode, (CUDNN_CONVOLUTION, CUDNN_CROSS_CORRELATION))
     # @assert length(padding) == length(stride) == length(upscale)
     cd = cudnnConvolutionDescriptor_t[0]
     cudnnCreateConvolutionDescriptor(cd)
-    cudnnSetConvolutionNdDescriptor(cd[1],length(padding),Cint[reverse(padding)...],Cint[reverse(stride)...],Cint[reverse(upscale)...],mode)
-    this = ConvolutionDescriptor(cd[1], padding, stride, upscale, mode)
+    cudnnSetConvolutionNdDescriptor_v3(cd[1],
+                                       length(padding),
+                                       Cint[reverse(padding)...],
+                                       Cint[reverse(stride)...],
+                                       Cint[reverse(upscale)...],
+                                       mode, cudnnDataType(datatype))
+    this = ConvolutionDescriptor(cd[1], padding, stride, upscale, mode, datatype)
     finalizer(this, free)
     this
 end
@@ -285,9 +322,10 @@ function cudnnGetConvolutionNdDescriptor(cd::ConvolutionDescriptor)
     s = Array(Cint, nd)
     u = Array(Cint, nd)
     m = cudnnConvolutionMode_t[0]
-    cudnnGetConvolutionNdDescriptor(cd, nd, n, p, s, u, m)
+    t = cudnnDataType_t[0]
+    cudnnGetConvolutionNdDescriptor_v3(cd.ptr, nd, n, p, s, u, m, t)
     inttuple(x)=tuple(Int[x...]...)
-    (n[1], inttuple(p), inttuple(s), inttuple(u), m[1])
+    (n[1], inttuple(p), inttuple(s), inttuple(u), m[1], juliaDataType(t[1]))
 end
 
 const defaultConvolutionDescriptor = ConvolutionDescriptor()
@@ -345,7 +383,7 @@ function cudnnGetConvolutionForwardAlgorithm(src::AbstractCudaArray, filter::Abs
                                              handle=cudnnHandle,
                                              convDesc=defaultConvolutionDescriptor,
                                              preference=CUDNN_CONVOLUTION_FWD_PREFER_FASTEST,
-                                             memoryLimitInbytes=5*10^9)
+                                             memoryLimitInbytes=10^9)
     algo = cudnnConvolutionFwdAlgo_t[0]
     cudnnGetConvolutionForwardAlgorithm(handle,TD(src),FD(filter),convDesc,TD(dest),preference,memoryLimitInbytes,algo)
     return algo[1]
@@ -363,14 +401,14 @@ function cudnnConvolutionForward(src::AbstractCudaArray, filter::AbstractCudaArr
                                  handle=cudnnHandle, alpha=1.0, beta=0.0, 
                                  convDesc=defaultConvolutionDescriptor,
                                  algorithm=CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM,
-                                 workSpace=nothing, workSpaceSizeInBytes=0)
+                                 workSpace=C_NULL, workSpaceSizeInBytes=0)
     @assert eltype(filter) == eltype(src)
     osize = cudnnGetConvolutionNdForwardOutputDim(src,filter;convDesc=convDesc)
     (dest == nothing) && (dest = CudaArray(eltype(src), osize))
     @assert osize == size(dest)
     @assert eltype(dest) == eltype(src)
     wsize = cudnnGetConvolutionForwardWorkspaceSize(src, filter, dest; algorithm=algorithm)
-    if ((wsize > 0) && (workSpace == nothing || workSpaceSizeInBytes < wsize))
+    if ((wsize > 0) && (workSpace == C_NULL || workSpaceSizeInBytes < wsize))
         workSpaceSizeInBytes = wsize
         workSpace = CudaArray(Int8, workSpaceSizeInBytes)
     end
@@ -385,7 +423,7 @@ end
 # conv2(x,w) in Julia performs 2-D convolution with padding equal to
 # one less than the w dimensions.
 
-Base.conv2(src::AbstractCudaArray, filter::AbstractCudaArray, dest=nothing)=cudnnConvolutionForward(src, filter, dest; convDesc=ConvolutionDescriptor(; padding = (size(filter,1)-1, size(filter,2)-1)))
+Base.conv2{T}(src::AbstractCudaArray{T}, filter::AbstractCudaArray{T}, dest=nothing)=cudnnConvolutionForward(src, filter, dest; convDesc=ConvolutionDescriptor(; datatype = T, padding = (size(filter,1)-1, size(filter,2)-1)))
 
 # n=h=w=1 for dest and c same as input.  CUDNN seems to assume a
 # single scalar bias per output channel, i.e. the same number is added
@@ -406,11 +444,14 @@ end
 # correspond to src=x, diff=dy, grad=dw.
 function cudnnConvolutionBackwardFilter(src::AbstractCudaArray, diff::AbstractCudaArray, grad::AbstractCudaArray;
                                         handle=cudnnHandle, alpha=1.0, beta=0.0, 
+                                        algo=CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0,
+                                        workSpace=C_NULL, workSpaceSizeInBytes=0,
                                         convDesc=defaultConvolutionDescriptor)
-    cudnnConvolutionBackwardFilter(handle,
-                                   cptr(alpha,src),TD(src),src,
-                                   TD(diff),diff,convDesc,
-                                   cptr(beta,grad),FD(grad),grad)
+    cudnnConvolutionBackwardFilter_v3(handle,
+                                      cptr(alpha,src),TD(src),src,
+                                      TD(diff),diff,convDesc,
+                                      algo, workSpace, workSpaceSizeInBytes,
+                                      cptr(beta,grad),FD(grad),grad)
     return grad
 end
 
@@ -418,11 +459,14 @@ end
 # correspond to filter=w, diff=dy, grad=dx.
 function cudnnConvolutionBackwardData(filter::AbstractCudaArray, diff::AbstractCudaArray, grad::AbstractCudaArray;
                                       handle=cudnnHandle, alpha=1.0, beta=0.0, 
+                                      algo=CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0,
+                                      workSpace=C_NULL, workSpaceSizeInBytes=0,
                                       convDesc=defaultConvolutionDescriptor)
-    cudnnConvolutionBackwardData(handle,cptr(alpha,diff),
-                                 FD(filter),filter,
-                                 TD(diff),diff,convDesc,
-                                 cptr(beta,grad),TD(grad),grad)
+    cudnnConvolutionBackwardData_v3(handle,cptr(alpha,diff),
+                                    FD(filter),filter,
+                                    TD(diff),diff,convDesc,
+                                    algo, workSpace, workSpaceSizeInBytes,
+                                    cptr(beta,grad),TD(grad),grad)
     return grad
 end
 
@@ -450,7 +494,7 @@ function TD(a::AbstractCudaArray, dims=ndims(a))
     (sz, st) = tensorsize(a, dims)
     d = cudnnTensorDescriptor_t[0]
     cudnnCreateTensorDescriptor(d)
-    cudnnSetTensorNdDescriptor(d[1], cudnntype(a), length(sz), sz, st)
+    cudnnSetTensorNdDescriptor(d[1], cudnnDataType(a), length(sz), sz, st)
     this = TD(d[1])
     finalizer(this, free)
     this
@@ -461,17 +505,12 @@ function FD(a::AbstractCudaArray, dims=ndims(a))
     (sz, st) = tensorsize(a, dims)
     d = cudnnFilterDescriptor_t[0]
     cudnnCreateFilterDescriptor(d)
-    cudnnSetFilterNdDescriptor(d[1], cudnntype(a), length(sz), sz)
+    cudnnSetFilterNdDescriptor(d[1], cudnnDataType(a), length(sz), sz)
     this = FD(d[1])
     finalizer(this, free)
     this
 end
 
-function cudnntype(a)
-    (eltype(a) == Float64 ? CUDNN_DATA_DOUBLE :
-     eltype(a) == Float32 ? CUDNN_DATA_FLOAT :
-     error("Supported data types are Float32 and Float64"))
-end
 
 # size and strides in Julia are in column-major format, e.g. (W,H,C,N)
 # whereas cudnn uses row-major, e.g. NCHW
@@ -502,7 +541,9 @@ end
 Base.strides(a::AbstractCudaArray)=map(i->stride(a,i), tuple(1:ndims(a)...))
 
 # For low level cudnn functions that require a pointer to a number
-cptr(x,a)=eltype(a)[x]
+cptr(x,a::CudaArray{Float64})=Float64[x]
+cptr(x,a::CudaArray{Float32})=Float32[x]
+cptr(x,a::CudaArray{Float16})=Float32[x]
 
 # Read the tensor descriptor (mostly for debugging)
 function cudnnGetTensorNdDescriptor(td, nbDimsRequested=8)
