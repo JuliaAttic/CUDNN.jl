@@ -62,7 +62,7 @@ using CUDNN: TD
 x = ones(5,4,3,2)
 tx = CudaArray(x)
 @test to_host(tx) == x
-@test cudnnGetTensorNdDescriptor(TD(tx)) == (CUDNN_DATA_DOUBLE, 4, [reverse(size(x))...], [reverse(strides(x))...])
+@test cudnnGetTensorNdDescriptor(TD(tx)) == (CUDNN_DATA_DOUBLE, 4, (reverse(size(x))...), (reverse(strides(x))...))
 
 
 using CUDNN: cudnnTransformTensor
@@ -170,9 +170,9 @@ dx = copy(y); dx[c] .-= 1
 # dump(y)
 
 using CUDNN: CUDNN_POOLING_MAX, CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING, CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING
-using CUDNN: PoolingDescriptor, free, cudnnGetPoolingNdDescriptor
-pd = PoolingDescriptor((3,3); padding=(2,2), stride=(1,1), mode=CUDNN_POOLING_MAX)
-@test cudnnGetPoolingNdDescriptor(pd) == (CUDNN_POOLING_MAX, length(pd.dims), pd.dims, pd.padding, pd.stride)
+using CUDNN: PD, cudnnGetPoolingNdDescriptor
+pd = PD(2, 3, 2, 1, CUDNN_POOLING_MAX)
+@test cudnnGetPoolingNdDescriptor(pd) == (CUDNN_POOLING_MAX, 2, (3,3), (2,2), (1,1))
 # free(pd)
 
 using CUDNN: cudnnPoolingForward, cudnnPoolingBackward, cudnnGetPoolingNdForwardOutputDim
@@ -186,71 +186,66 @@ x = reshape(Float64[1:20;], 5, 4, 1, 1); tx = CudaArray(x)
 
 # 3 size, 0 pad, 1 stride
 ty1 = CudaArray(zeros(3, 2, 1, 1))
-pd1 = PoolingDescriptor((3,3); padding=(0,0), stride=(1,1), mode=CUDNN_POOLING_MAX)
+pd1 = PD(2, 3, 0, 1, CUDNN_POOLING_MAX)
 @test cudnnGetPoolingNdForwardOutputDim(pd1, tx) == (3,2,1,1)
-@test squeeze(to_host(cudnnPoolingForward(pd1, tx, ty1)),(3,4)) == [13 18; 14 19; 15 20.]
+@test squeeze(to_host(cudnnPoolingForward(tx, ty1; pd=pd1)),(3,4)) == [13 18; 14 19; 15 20.]
 ty2 = CudaArray(zeros(3, 2, 1, 1))
-pd2 = PoolingDescriptor((3,3); padding=(0,0), stride=(1,1), mode=CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING)
+pd2 = PD(2, 3, 0, 1, CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING)
 @test cudnnGetPoolingNdForwardOutputDim(pd2, tx) == (3,2,1,1)
-@test squeeze(to_host(cudnnPoolingForward(pd2, tx, ty2)),(3,4)) == [7 12; 8 13; 9 14.]
+@test squeeze(to_host(cudnnPoolingForward(tx, ty2; pd=pd2)),(3,4)) == [7 12; 8 13; 9 14.]
 ty3 = CudaArray(zeros(3, 2, 1, 1))
-pd3 = PoolingDescriptor((3,3); padding=(0,0), stride=(1,1), mode=CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING)
+pd3 = PD(2, 3, 0, 1, CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING)
 @test cudnnGetPoolingNdForwardOutputDim(pd3, tx) == (3,2,1,1)
-@test squeeze(to_host(cudnnPoolingForward(pd3, tx, ty3)),(3,4)) == [7 12; 8 13; 9 14.]
+@test squeeze(to_host(cudnnPoolingForward(tx, ty3, pd=pd3)),(3,4)) == [7 12; 8 13; 9 14.]
 
 dy1 = reshape(Float64[1:6;], 3, 2, 1, 1); 
 tdy1 = CudaArray(dy1)
 tdx1 = zeros(tx)
-@test squeeze(to_host(cudnnPoolingBackward(pd1, ty1, tdy1, tx, tdx1)),(3,4)) == [0 0 0 0;0 0 0 0;0 0 1 4;0 0 2 5;0 0 3 6.]
+@test squeeze(to_host(cudnnPoolingBackward(ty1, tdy1, tx, tdx1; pd=pd1)),(3,4)) == [0 0 0 0;0 0 0 0;0 0 1 4;0 0 2 5;0 0 3 6.]
 tdx2 = zeros(tx)
-@test epseq(squeeze(to_host(cudnnPoolingBackward(pd2, ty2, tdy1, tx, tdx2)),(3,4)), [1/9 5/9 5/9 4/9;3/9 12/9 12/9 9/9;6/9 21/9 21/9 15/9;5/9 16/9 16/9 11/9;3/9 9/9 9/9 6/9])
+@test epseq(squeeze(to_host(cudnnPoolingBackward(ty2, tdy1, tx, tdx2; pd=pd2)),(3,4)), [1/9 5/9 5/9 4/9;3/9 12/9 12/9 9/9;6/9 21/9 21/9 15/9;5/9 16/9 16/9 11/9;3/9 9/9 9/9 6/9])
 tdx3 = zeros(tx)
-@test epseq(squeeze(to_host(cudnnPoolingBackward(pd3, ty3, tdy1, tx, tdx3)),(3,4)), [1/9 5/9 5/9 4/9;3/9 12/9 12/9 9/9;6/9 21/9 21/9 15/9;5/9 16/9 16/9 11/9;3/9 9/9 9/9 6/9])
+@test epseq(squeeze(to_host(cudnnPoolingBackward(ty3, tdy1, tx, tdx3; pd=pd3)),(3,4)), [1/9 5/9 5/9 4/9;3/9 12/9 12/9 9/9;6/9 21/9 21/9 15/9;5/9 16/9 16/9 11/9;3/9 9/9 9/9 6/9])
 
 # 3 size, 1 pad, 1 stride
 ty4 = CudaArray(zeros(5, 4, 1, 1))
-pd4 = PoolingDescriptor((3,3); padding=(1,1), stride=(1,1), mode=CUDNN_POOLING_MAX)
+pd4 = PD(2, 3, 1, 1, CUDNN_POOLING_MAX)
 @test cudnnGetPoolingNdForwardOutputDim(pd4, tx) == (5,4,1,1)
-@test squeeze(to_host(cudnnPoolingForward(pd4, tx, ty4)),(3,4)) == [7 12 17 17; 8 13 18 18; 9 14 19 19; 10 15 20 20; 10 15 20 20.]
+@test squeeze(to_host(cudnnPoolingForward(tx, ty4; pd=pd4)),(3,4)) == [7 12 17 17; 8 13 18 18; 9 14 19 19; 10 15 20 20; 10 15 20 20.]
 ty5 = CudaArray(zeros(5, 4, 1, 1))
-pd5 = PoolingDescriptor((3,3); padding=(1,1), stride=(1,1), mode=CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING)
+pd5 = PD(2, 3, 1, 1, CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING)
 @test cudnnGetPoolingNdForwardOutputDim(pd5, tx) == (5,4,1,1)
-@test squeeze(to_host(cudnnPoolingForward(pd5, tx, ty5)),(3,4)) == [16/9 39/9 69/9 56/9; 3 7 12 87/9; 33/9 8 13 93/9; 39/9 9 14 11; 28/9 57/9 87/9 68/9]
+@test squeeze(to_host(cudnnPoolingForward(tx, ty5; pd=pd5)),(3,4)) == [16/9 39/9 69/9 56/9; 3 7 12 87/9; 33/9 8 13 93/9; 39/9 9 14 11; 28/9 57/9 87/9 68/9]
 # This is buggy in the library:
 ty6 = CudaArray(zeros(5, 4, 1, 1))
-pd6 = PoolingDescriptor((3,3); padding=(1,1), stride=(1,1), mode=CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING)
-cudnnPoolingForward(pd6, tx, ty6)
+pd6 = PD(2, 3, 1, 1, CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING)
 @test cudnnGetPoolingNdForwardOutputDim(pd6, tx) == (5,4,1,1)
-# @test squeeze(to_host(cudnnPoolingForward(pd6, tx, ty6)),(3,4)) == [16/4 39/6 69/6 56/4; 27/6 7 12 87/6; 33/6 8 13 93/6; 39/6 9 14 99/6; 28/4 57/6 87/6 68/4]
-# dump( squeeze(to_host(cudnnPoolingForward(pd6, tx, ty6)),(3,4)) )
-# dump( [16/4 39/6 69/6 56/4; 27/6 7 12 87/6; 33/6 8 13 93/6; 39/6 9 14 99/6; 28/4 57/6 87/6 68/4] )
+@show squeeze(to_host(cudnnPoolingForward(tx, ty6; pd=pd6)),(3,4)) == [16/4 39/6 69/6 56/4; 27/6 7 12 87/6; 33/6 8 13 93/6; 39/6 9 14 99/6; 28/4 57/6 87/6 68/4]
 
 dy4 = reshape(Float64[1:20;], 5, 4, 1, 1); 
 tdy4 = CudaArray(dy4)
 tdx4 = zeros(tx)
-@test squeeze(to_host(cudnnPoolingBackward(pd4, ty4, tdy4, tx, tdx4)),(3,4)) == [0 0 0 0;0 1 6 11+16;0 2 7 12+17;0 3 8 13+18;0 4+5 9+10 14+15+19+20.]
+@test squeeze(to_host(cudnnPoolingBackward(ty4, tdy4, tx, tdx4; pd=pd4)),(3,4)) == [0 0 0 0;0 1 6 11+16;0 2 7 12+17;0 3 8 13+18;0 4+5 9+10 14+15+19+20.]
 tdx5 = zeros(tx)
-@test epseq(squeeze(to_host(cudnnPoolingBackward(pd5, ty5, tdy4, tx, tdx5)),(3,4)), [16/9 39/9 69/9 56/9; 3 7 12 87/9; 33/9 8 13 93/9; 39/9 9 14 11; 28/9 57/9 87/9 68/9])
+@test epseq(squeeze(to_host(cudnnPoolingBackward(ty5, tdy4, tx, tdx5; pd=pd5)),(3,4)), [16/9 39/9 69/9 56/9; 3 7 12 87/9; 33/9 8 13 93/9; 39/9 9 14 11; 28/9 57/9 87/9 68/9])
 tdx6 = zeros(tx)
 # Buggy fails test:
-cudnnPoolingBackward(pd6, ty6, tdy4, tx, tdx6)
-# @show (squeeze(to_host(cudnnPoolingBackward(pd6, ty6, tdy4, tx, tdx6)),(3,4)), [1/9 5/9 5/9 4/9;3/9 12/9 12/9 9/9;6/9 21/9 21/9 15/9;5/9 16/9 16/9 11/9;3/9 9/9 9/9 6/9])
+@show epseq(squeeze(to_host(cudnnPoolingBackward(ty6, tdy4, tx, tdx6; pd=pd6)),(3,4)), [1/9 5/9 5/9 4/9;3/9 12/9 12/9 9/9;6/9 21/9 21/9 15/9;5/9 16/9 16/9 11/9;3/9 9/9 9/9 6/9])
 
 # 3 size, 1 pad, 2 stride
 ty7 = CudaArray(zeros(3, 3, 1, 1))
-pd7 = PoolingDescriptor((3,3); padding=(1,1), stride=(2,2), mode=CUDNN_POOLING_MAX)
+pd7 = PD(2, 3, 1, 2, CUDNN_POOLING_MAX)
 @test cudnnGetPoolingNdForwardOutputDim(pd7, tx) == (3,3,1,1)
-@test squeeze(to_host(cudnnPoolingForward(pd7, tx, ty7)),(3,4)) == [7 17 17; 9 19 19; 10 20 20.]
+@test squeeze(to_host(cudnnPoolingForward(tx, ty7; pd=pd7)),(3,4)) == [7 17 17; 9 19 19; 10 20 20.]
 # Note below that if the window falls outside the padding, the denom can be less than 9!
 ty8 = CudaArray(zeros(3, 3, 1, 1))
-pd8 = PoolingDescriptor((3,3); padding=(1,1), stride=(2,2), mode=CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING)
+pd8 = PD(2, 3, 1, 2, CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING)
 @test cudnnGetPoolingNdForwardOutputDim(pd8, tx) == (3,3,1,1)
-@test squeeze(to_host(cudnnPoolingForward(pd8, tx, ty8)),(3,4)) == [16/9 69/9 33/6; 33/9 13 54/6; 28/9 87/9 39/6]
+@test squeeze(to_host(cudnnPoolingForward(tx, ty8; pd=pd8)),(3,4)) == [16/9 69/9 33/6; 33/9 13 54/6; 28/9 87/9 39/6]
 # This is buggy in the library:
-# ty9 = CudaArray(zeros(3, 3, 1, 1))
-# pd9 = PoolingDescriptor((3,3); padding=(1,1), stride=(2,2), mode=CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING)
-# dump( squeeze(to_host(cudnnPoolingForward(pd9, tx, ty9)),(3,4)) )
-# dump( [16/4 69/6 33/2; 33/6 13 54/3; 28/4 87/6 39/2] )
+ty9 = CudaArray(zeros(3, 3, 1, 1))
+pd9 = PD(2, 3, 1, 2, CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING)
+@show squeeze(to_host(cudnnPoolingForward(tx, ty9; pd=pd9)),(3,4)) == [16/4 69/6 33/2; 33/6 13 54/3; 28/4 87/6 39/2]
 
 # 3D pooling not supported:
 # x10 = reshape(Float64[1:60;], 5, 4, 3, 1, 1); tx10 = CudaArray(x10)
@@ -281,17 +276,16 @@ using CUDNN: FD
 x = rand(5,4,3,2)
 tx = CudaArray(x)
 @test to_host(tx) == x
-@test cudnnGetFilterNdDescriptor(FD(tx)) == (CUDNN_DATA_DOUBLE, 4, [reverse(size(x))...])
+@test cudnnGetFilterNdDescriptor(FD(tx)) == (CUDNN_DATA_DOUBLE, 4, (reverse(size(x))...))
 
 # Convolution
 
-using CUDNN: ConvolutionDescriptor, cudnnGetConvolutionNdDescriptor, CUDNN_CONVOLUTION
+using CUDNN: CD, cudnnGetConvolutionNdDescriptor, CUDNN_CONVOLUTION
+cd = CD(2, 0, 1, 1, CUDNN_CONVOLUTION, Float32)
 if CUDNN_VERSION >= 3000
-pd = ConvolutionDescriptor(padding=(0,0), stride=(1,1), upscale=(1,1), mode=CUDNN_CONVOLUTION, datatype=Float32)
-@test cudnnGetConvolutionNdDescriptor(pd) == (length(pd.padding), pd.padding, pd.stride, pd.upscale, pd.mode, pd.datatype)
+@test cudnnGetConvolutionNdDescriptor(cd) == (2, (0,0), (1,1), (1,1), CUDNN_CONVOLUTION, Float32)
 else # if CUDNN_VERSION >= 3000
-pd = ConvolutionDescriptor(padding=(0,0), stride=(1,1), upscale=(1,1), mode=CUDNN_CONVOLUTION)
-@test cudnnGetConvolutionNdDescriptor(pd) == (length(pd.padding), pd.padding, pd.stride, pd.upscale, pd.mode)
+@test cudnnGetConvolutionNdDescriptor(cd) == (2, (0,0), (1,1), (1,1), CUDNN_CONVOLUTION)
 end # if CUDNN_VERSION >= 3000
 # Note: upscale other than (1,1) gives unsupported error.
 # Note: not sure if we need to expose the ConvolutionDescriptor or just have options for convolution.
@@ -326,9 +320,9 @@ x = reshape(Float64[1:20;], 5, 4, 1, 1); tx = CudaArray(x)
 w = reshape(Float64[1:4;], 2, 2, 1, 1); tw = CudaArray(w)
 @test squeeze(to_host(cudnnConvolutionForward(tx, tw)),(3,4)) == [29 79 129; 39 89 139; 49 99 149; 59 109 159.]
 
-using CUDNN: ConvolutionDescriptor, CUDNN_CROSS_CORRELATION
-cdesc = ConvolutionDescriptor(mode=CUDNN_CROSS_CORRELATION)
-@test squeeze(to_host(cudnnConvolutionForward(tx, tw; convDesc=cdesc)),(3,4)) == [51 101 151;61 111 161;71 121 171;81 131 181.]
+using CUDNN: CD, CUDNN_CROSS_CORRELATION
+cdesc = CD(mode=CUDNN_CROSS_CORRELATION)
+@test squeeze(to_host(cudnnConvolutionForward(tx, tw; cd=cdesc)),(3,4)) == [51 101 151;61 111 161;71 121 171;81 131 181.]
 
 using CUDNN: cudnnConvolutionBackwardBias, cudnnConvolutionBackwardFilter, cudnnConvolutionBackwardData
 x = rand(5,4,3,2); tx = CudaArray(x)
@@ -348,7 +342,7 @@ tdw = zeros(tw)
 x = rand(5,4); tx = CudaArray(reshape(x, (5,4,1,1)))
 w = rand(3,3); tw = CudaArray(reshape(w, (3,3,1,1)))
 padding=map(x->x-1,size(w))
-@test epseq(squeeze(to_host(cudnnConvolutionForward(tx, tw; convDesc=ConvolutionDescriptor(padding=padding))),(3,4)), conv2(x,w))
+@test epseq(squeeze(to_host(cudnnConvolutionForward(tx, tw; cd=CD(padding=padding))),(3,4)), conv2(x,w))
 @test epseq(squeeze(to_host(conv2(tx, tw)), (3,4)), conv2(x,w))
 
 :ok
