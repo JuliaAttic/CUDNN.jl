@@ -137,7 +137,7 @@ function PD(nd, window, padding, stride, mode)
     return this
 end
 
-PD(; ndims=2, window=2, padding=0, stride=2, mode=CUDNN_POOLING_MAX, o...)=PD(ndims,window,padding,stride,mode)
+PD(; ndims=2, window=2, padding=0, stride=window, mode=CUDNN_POOLING_MAX, o...)=PD(ndims,window,padding,stride,mode)
 PD(a::AbstractCudaArray; o...)=PD(; ndims=ndims(a)-2, o...)
 
 # This is missing from CUDNN although mentioned in the documentation
