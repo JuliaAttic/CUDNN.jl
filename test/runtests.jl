@@ -1,5 +1,6 @@
 using Base.Test
 using CUDArt
+using CUDNN
 
 # Uncomment this if you want lots of messages:
 # Base.Test.default_handler(r::Base.Test.Success) = info("$(r.expr)")
@@ -285,8 +286,13 @@ tx = CudaArray(x)
 # Convolution
 
 using CUDNN: ConvolutionDescriptor, cudnnGetConvolutionNdDescriptor, CUDNN_CONVOLUTION
+if CUDNN_VERSION >= 3000
 pd = ConvolutionDescriptor(padding=(0,0), stride=(1,1), upscale=(1,1), mode=CUDNN_CONVOLUTION, datatype=Float32)
 @test cudnnGetConvolutionNdDescriptor(pd) == (length(pd.padding), pd.padding, pd.stride, pd.upscale, pd.mode, pd.datatype)
+else # if CUDNN_VERSION >= 3000
+pd = ConvolutionDescriptor(padding=(0,0), stride=(1,1), upscale=(1,1), mode=CUDNN_CONVOLUTION)
+@test cudnnGetConvolutionNdDescriptor(pd) == (length(pd.padding), pd.padding, pd.stride, pd.upscale, pd.mode)
+end # if CUDNN_VERSION >= 3000
 # Note: upscale other than (1,1) gives unsupported error.
 # Note: not sure if we need to expose the ConvolutionDescriptor or just have options for convolution.
 # Note: need to understand upscale.  how often do we need non-default padding and stride?

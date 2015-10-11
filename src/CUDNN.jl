@@ -2,6 +2,11 @@ module CUDNN
 using Compat
 using CUDArt
 
+const libcudnn = Libdl.find_library(["libcudnn"])
+isempty(libcudnn) && error("CUDNN library cannot be found")
+const CUDNN_VERSION = convert(Int, ccall((:cudnnGetVersion,libcudnn),Csize_t,()))
+export CUDNN_VERSION
+
 export cudnnTransformTensor, cudnnAddTensor, cudnnSetTensor, cudnnScaleTensor
 export CUDNN_ADD_IMAGE, CUDNN_ADD_SAME_HW, CUDNN_ADD_FEATURE_MAP, CUDNN_ADD_SAME_CHW, CUDNN_ADD_SAME_C, CUDNN_ADD_FULL_TENSOR
 export cudnnActivationForward, cudnnActivationBackward
@@ -16,9 +21,6 @@ export cudnnGetConvolutionNdForwardOutputDim, cudnnGetPoolingNdForwardOutputDim,
 
 import Base: unsafe_convert, conv2, strides
 import CUDArt: free
-
-const libcudnn = Libdl.find_library(["libcudnn"])
-isempty(libcudnn) && error("CUDNN library cannot be found")
 
 # This is missing from CUDArt:
 type cudaStream; end
@@ -288,6 +290,8 @@ function cudnnPoolingBackward(pd::PoolingDescriptor, src::AbstractCudaArray, src
 end
 
 
+if CUDNN_VERSION >= 3000
+
 type ConvolutionDescriptor; ptr; padding; stride; upscale; mode; datatype; end
 
 # TODO: accept single number args for padding etc.
@@ -300,19 +304,16 @@ function ConvolutionDescriptor(; padding=(0,0),
     # @assert length(padding) == length(stride) == length(upscale)
     cd = cudnnConvolutionDescriptor_t[0]
     cudnnCreateConvolutionDescriptor(cd)
-    cudnnSetConvolutionNdDescriptor_v3(cd[1],
-                                       length(padding),
-                                       Cint[reverse(padding)...],
-                                       Cint[reverse(stride)...],
-                                       Cint[reverse(upscale)...],
-                                       mode, cudnnDataType(datatype))
+    cudnnSetConvolutionNdDescriptor(cd[1],
+                                    length(padding),
+                                    Cint[reverse(padding)...],
+                                    Cint[reverse(stride)...],
+                                    Cint[reverse(upscale)...],
+                                    mode, cudnnDataType(datatype))
     this = ConvolutionDescriptor(cd[1], padding, stride, upscale, mode, datatype)
     finalizer(this, free)
     this
 end
-
-free(cd::ConvolutionDescriptor)=cudnnDestroyConvolutionDescriptor(cd.ptr)
-unsafe_convert(::Type{cudnnConvolutionDescriptor_t}, cd::ConvolutionDescriptor)=cd.ptr
 
 # Read info from gpu for debugging
 function cudnnGetConvolutionNdDescriptor(cd::ConvolutionDescriptor)
@@ -323,10 +324,42 @@ function cudnnGetConvolutionNdDescriptor(cd::ConvolutionDescriptor)
     u = Array(Cint, nd)
     m = cudnnConvolutionMode_t[0]
     t = cudnnDataType_t[0]
-    cudnnGetConvolutionNdDescriptor_v3(cd.ptr, nd, n, p, s, u, m, t)
+    cudnnGetConvolutionNdDescriptor(cd.ptr, nd, n, p, s, u, m, t)
     inttuple(x)=tuple(Int[x...]...)
     (n[1], inttuple(p), inttuple(s), inttuple(u), m[1], juliaDataType(t[1]))
 end
+
+else # if CUDNN_VERSION >= 3000
+
+type ConvolutionDescriptor; ptr; padding; stride; upscale; mode; end
+
+function ConvolutionDescriptor(; padding=(0,0), stride=map(x->1,padding), upscale=map(x->1,padding), mode=CUDNN_CONVOLUTION)
+    @assert in(mode, (CUDNN_CONVOLUTION, CUDNN_CROSS_CORRELATION))
+    # @assert length(padding) == length(stride) == length(upscale)
+    cd = cudnnConvolutionDescriptor_t[0]
+    cudnnCreateConvolutionDescriptor(cd)
+    cudnnSetConvolutionNdDescriptor(cd[1],length(padding),Cint[reverse(padding)...],Cint[reverse(stride)...],Cint[reverse(upscale)...],mode)
+    this = ConvolutionDescriptor(cd[1], padding, stride, upscale, mode)
+    finalizer(this, free)
+    this
+end
+
+function cudnnGetConvolutionNdDescriptor(cd::ConvolutionDescriptor)
+    nd = length(cd.padding)
+    n = Cint[0]
+    p = Array(Cint, nd)
+    s = Array(Cint, nd)
+    u = Array(Cint, nd)
+    m = cudnnConvolutionMode_t[0]
+    cudnnGetConvolutionNdDescriptor(cd, nd, n, p, s, u, m)
+    inttuple(x)=tuple(Int[x...]...)
+    (n[1], inttuple(p), inttuple(s), inttuple(u), m[1])
+end
+
+end # if CUDNN_VERSION >= 3000
+
+free(cd::ConvolutionDescriptor)=cudnnDestroyConvolutionDescriptor(cd.ptr)
+unsafe_convert(::Type{cudnnConvolutionDescriptor_t}, cd::ConvolutionDescriptor)=cd.ptr
 
 const defaultConvolutionDescriptor = ConvolutionDescriptor()
 
@@ -423,7 +456,11 @@ end
 # conv2(x,w) in Julia performs 2-D convolution with padding equal to
 # one less than the w dimensions.
 
+if CUDNN_VERSION >= 3000
 Base.conv2{T}(src::AbstractCudaArray{T}, filter::AbstractCudaArray{T}, dest=nothing)=cudnnConvolutionForward(src, filter, dest; convDesc=ConvolutionDescriptor(; datatype = T, padding = (size(filter,1)-1, size(filter,2)-1)))
+else # if CUDNN_VERSION >= 3000
+Base.conv2(src::AbstractCudaArray, filter::AbstractCudaArray, dest=nothing)=cudnnConvolutionForward(src, filter, dest; convDesc=ConvolutionDescriptor(; padding = (size(filter,1)-1, size(filter,2)-1)))
+end # if CUDNN_VERSION >= 3000
 
 # n=h=w=1 for dest and c same as input.  CUDNN seems to assume a
 # single scalar bias per output channel, i.e. the same number is added
@@ -440,6 +477,8 @@ function cudnnConvolutionBackwardBias(src::AbstractCudaArray, dest::AbstractCuda
     return dest
 end
 
+if CUDNN_VERSION >= 3000
+
 # I am guessing if y=w*x+b going forward, the arguments below
 # correspond to src=x, diff=dy, grad=dw.
 function cudnnConvolutionBackwardFilter(src::AbstractCudaArray, diff::AbstractCudaArray, grad::AbstractCudaArray;
@@ -447,11 +486,11 @@ function cudnnConvolutionBackwardFilter(src::AbstractCudaArray, diff::AbstractCu
                                         algo=CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0,
                                         workSpace=C_NULL, workSpaceSizeInBytes=0,
                                         convDesc=defaultConvolutionDescriptor)
-    cudnnConvolutionBackwardFilter_v3(handle,
-                                      cptr(alpha,src),TD(src),src,
-                                      TD(diff),diff,convDesc,
-                                      algo, workSpace, workSpaceSizeInBytes,
-                                      cptr(beta,grad),FD(grad),grad)
+    cudnnConvolutionBackwardFilter(handle,
+                                   cptr(alpha,src),TD(src),src,
+                                   TD(diff),diff,convDesc,
+                                   algo, workSpace, workSpaceSizeInBytes,
+                                   cptr(beta,grad),FD(grad),grad)
     return grad
 end
 
@@ -462,14 +501,39 @@ function cudnnConvolutionBackwardData(filter::AbstractCudaArray, diff::AbstractC
                                       algo=CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0,
                                       workSpace=C_NULL, workSpaceSizeInBytes=0,
                                       convDesc=defaultConvolutionDescriptor)
-    cudnnConvolutionBackwardData_v3(handle,cptr(alpha,diff),
-                                    FD(filter),filter,
-                                    TD(diff),diff,convDesc,
-                                    algo, workSpace, workSpaceSizeInBytes,
-                                    cptr(beta,grad),TD(grad),grad)
+    cudnnConvolutionBackwardData(handle,cptr(alpha,diff),
+                                 FD(filter),filter,
+                                 TD(diff),diff,convDesc,
+                                 algo, workSpace, workSpaceSizeInBytes,
+                                 cptr(beta,grad),TD(grad),grad)
     return grad
 end
 
+else # if CUDNN_VERSION >= 3000
+
+function cudnnConvolutionBackwardFilter(src::AbstractCudaArray, diff::AbstractCudaArray, grad::AbstractCudaArray;
+                                        handle=cudnnHandle, alpha=1.0, beta=0.0, 
+                                        convDesc=defaultConvolutionDescriptor)
+    cudnnConvolutionBackwardFilter(handle,
+                                   cptr(alpha,src),TD(src),src,
+                                   TD(diff),diff,convDesc,
+                                   cptr(beta,grad),FD(grad),grad)
+    return grad
+end
+
+# I am guessing if y=w*x+b going forward, the arguments below
+# correspond to filter=w, diff=dy, grad=dx.
+function cudnnConvolutionBackwardData(filter::AbstractCudaArray, diff::AbstractCudaArray, grad::AbstractCudaArray;
+                                      handle=cudnnHandle, alpha=1.0, beta=0.0, 
+                                      convDesc=defaultConvolutionDescriptor)
+    cudnnConvolutionBackwardData(handle,cptr(alpha,diff),
+                                 FD(filter),filter,
+                                 TD(diff),diff,convDesc,
+                                 cptr(beta,grad),TD(grad),grad)
+    return grad
+end
+
+end  #if CUDNN_VERSION >= 3000
 
 # Tensor and Filter descriptors
 

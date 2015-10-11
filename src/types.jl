@@ -1,8 +1,9 @@
+# The version is determined dynamically from the library
+# const CUDNN_MAJOR = 3
+# const CUDNN_MINOR = 0
+# const CUDNN_PATCHLEVEL = 2
+# const CUDNN_VERSION = CUDNN_MAJOR * 1000 + CUDNN_MINOR * 100 + CUDNN_PATCHLEVEL
 
-const CUDNN_MAJOR = 3
-const CUDNN_MINOR = 0
-const CUDNN_PATCHLEVEL = 2
-const CUDNN_VERSION = CUDNN_MAJOR * 1000 + CUDNN_MINOR * 100 + CUDNN_PATCHLEVEL
 const CUDNN_LRN_MIN_N = 1
 const CUDNN_LRN_MAX_N = 16
 const CUDNN_LRN_MIN_K = 1.0e-5
