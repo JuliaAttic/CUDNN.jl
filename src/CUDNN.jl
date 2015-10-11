@@ -126,7 +126,7 @@ function CD(nd, padding, stride, upscale, mode, xtype)
 end
 
 CD(; ndims=2, padding=0, stride=1, upscale=1, mode=CUDNN_CONVOLUTION, eltype=Float32, o...)=CD(ndims, padding, stride, upscale, mode, eltype)
-CD(a::AbstractCudaArray; o...)=CD(ndims=ndims(a)-2, eltype=eltype(a), o...)
+CD(a::AbstractCudaArray; o...)=CD(; ndims=ndims(a)-2, eltype=eltype(a), o...)
 
 function PD(nd, window, padding, stride, mode)
     pd = cudnnPoolingDescriptor_t[0]
@@ -138,7 +138,7 @@ function PD(nd, window, padding, stride, mode)
 end
 
 PD(; ndims=2, window=2, padding=0, stride=2, mode=CUDNN_POOLING_MAX, o...)=PD(ndims,window,padding,stride,mode)
-PD(a::AbstractCudaArray; o...)=PD(ndims=ndims(a)-2, o...)
+PD(a::AbstractCudaArray; o...)=PD(; ndims=ndims(a)-2, o...)
 
 # This is missing from CUDNN although mentioned in the documentation
 const CUDNN_MAX_DIM = 8
@@ -312,7 +312,7 @@ end
 # one less than the w dimensions.
 
 Base.conv2{T}(src::AbstractCudaArray{T}, filter::AbstractCudaArray{T}, dest=nothing)=
-    cudnnConvolutionForward(src, filter, dest; cd=CD(padding = (size(filter,1)-1, size(filter,2)-1)))
+    cudnnConvolutionForward(src, filter, dest; cd=CD(src; padding = (size(filter,1)-1, size(filter,2)-1)))
 
 # n=h=w=1 for dest and c same as input.  CUDNN seems to assume a
 # single scalar bias per output channel, i.e. the same number is added

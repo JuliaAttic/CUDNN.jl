@@ -321,7 +321,7 @@ w = reshape(Float64[1:4;], 2, 2, 1, 1); tw = CudaArray(w)
 @test squeeze(to_host(cudnnConvolutionForward(tx, tw)),(3,4)) == [29 79 129; 39 89 139; 49 99 149; 59 109 159.]
 
 using CUDNN: CD, CUDNN_CROSS_CORRELATION
-cdesc = CD(mode=CUDNN_CROSS_CORRELATION)
+cdesc = CD(tx; mode=CUDNN_CROSS_CORRELATION)
 @test squeeze(to_host(cudnnConvolutionForward(tx, tw; cd=cdesc)),(3,4)) == [51 101 151;61 111 161;71 121 171;81 131 181.]
 
 using CUDNN: cudnnConvolutionBackwardBias, cudnnConvolutionBackwardFilter, cudnnConvolutionBackwardData
@@ -342,7 +342,7 @@ tdw = zeros(tw)
 x = rand(5,4); tx = CudaArray(reshape(x, (5,4,1,1)))
 w = rand(3,3); tw = CudaArray(reshape(w, (3,3,1,1)))
 padding=map(x->x-1,size(w))
-@test epseq(squeeze(to_host(cudnnConvolutionForward(tx, tw; cd=CD(padding=padding))),(3,4)), conv2(x,w))
+@test epseq(squeeze(to_host(cudnnConvolutionForward(tx, tw; cd=CD(tx; padding=padding))),(3,4)), conv2(x,w))
 @test epseq(squeeze(to_host(conv2(tx, tw)), (3,4)), conv2(x,w))
 
 :ok
