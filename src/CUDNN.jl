@@ -207,6 +207,30 @@ end
 # mmul y: (1,1,K,N)
 # mmul b: (1,1,K,1)
 
+# MATLAB equivalents:
+
+# matlab 1-D y=conv(x,w,'full')  "Full convolution (default)."
+# y[k] = sum[j] x[j] w[k-j+1]
+# k=1:x+w-1
+# j=max(1,k+1-w):min(k,x)
+# cudnn: ndims=2, padding=w-1, stride=1, upscale=1, mode=CUDNN_CONVOLUTION
+# Note: ndims=1 is not implemented, just use ndims=2 and get the central only non-zero column of the result.
+
+# matlab 1-D y=conv(x,w,'same')  "Central part of the convolution of the same size as u."
+# y[k] = sum[j] x[j] w[k-j+w/2+1]
+# k=1:x
+# j=max(1,k-w/2+1):min(k+w/2,x)
+# cudnn: ndims=2, padding=w/2, stride=1, upscale=1, mode=CUDNN_CONVOLUTION
+# Note: This works only if length(w) is odd.  There is no setting to get 'same' with w even.
+
+# matlab 1-D y=conv(x,w,'valid')  "Only those parts of the convolution that are computed without the zero-padded edges."
+# y[k] = sum[j] x[j] w[k-j+w]
+# k=1:x-w+1
+# j=k:k+w-1
+# cudnn: ndims=2, padding=0, stride=1, upscale=1, mode=CUDNN_CONVOLUTION
+
+# TODO: use the new doc system.
+
 # This function returns the dimensions of the resulting n-D tensor of a nbDims-2-D
 # convolution, given the convolution descriptor, the input tensor descriptor and the filter
 # descriptor This function can help to setup the output tensor and allocate the proper
