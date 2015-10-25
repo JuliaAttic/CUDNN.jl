@@ -214,7 +214,8 @@ end
 # k=1:x+w-1
 # j=max(1,k+1-w):min(k,x)
 # cudnn: ndims=2, padding=w-1, stride=1, upscale=1, mode=CUDNN_CONVOLUTION
-# Note: ndims=1 is not implemented, just use ndims=2 and get the central only non-zero column of the result.
+# Note: for cudnn you need to reshape the vectors to (n,1,1,1) and get
+# the central (only non-zero) column of the result.
 
 # matlab 1-D y=conv(x,w,'same')  "Central part of the convolution of the same size as u."
 # y[k] = sum[j] x[j] w[k-j+w/2+1]
@@ -492,6 +493,8 @@ end
 
 function cudnnAddTensor(bias::AbstractCudaArray, src::AbstractCudaArray;
                         handle=cudnnHandle, alpha=1.0, beta=1.0, mode=CUDNN_ADD_SAME_C)
+    CUDNN_VERSION >= 3000 ? 
+    cudnnAddTensor(handle, cptr(alpha,bias), TD(bias,4), bias, cptr(beta,src), TD(src,4), src) :
     cudnnAddTensor(handle, mode, cptr(alpha,bias), TD(bias,4), bias, cptr(beta,src), TD(src,4), src)
     return src
 end

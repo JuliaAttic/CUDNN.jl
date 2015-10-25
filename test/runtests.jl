@@ -1,6 +1,7 @@
 using Base.Test
 using CUDArt
 using CUDNN
+@show CUDNN_VERSION
 
 # Uncomment this if you want lots of messages:
 # Base.Test.default_handler(r::Base.Test.Success) = info("$(r.expr)")
