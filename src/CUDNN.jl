@@ -306,16 +306,16 @@ end
 
 function cudnnConvolutionForward(src, filter, dest=nothing;
                                  handle=cudnnHandle, alpha=1.0, beta=0.0, 
-                                 algorithm=CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM,
+                                 algorithm=CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM,
                                  workSpace=C_NULL, workSpaceSizeInBytes=0,
                                  cd=nothing, o...)
     cd1 = (cd == nothing ? CD(src; o...) : cd)
     @assert eltype(filter) == eltype(src)
-    osize = cudnnGetConvolutionNdForwardOutputDim(src,filter; cd=cd1)
+    @show osize = cudnnGetConvolutionNdForwardOutputDim(src,filter; cd=cd1)
     (dest == nothing) && (dest = CudaArray(eltype(src), osize))
     @assert osize == size(dest)
     @assert eltype(dest) == eltype(src)
-    wsize = cudnnGetConvolutionForwardWorkspaceSize(src, filter, dest; algorithm=algorithm, cd=cd1)
+    @show wsize = cudnnGetConvolutionForwardWorkspaceSize(src, filter, dest; algorithm=algorithm, cd=cd1)
     if ((wsize > 0) && (workSpace == C_NULL || workSpaceSizeInBytes < wsize))
         workSpaceSizeInBytes = wsize
         ws = CudaArray(Int8, workSpaceSizeInBytes)
