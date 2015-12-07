@@ -1,7 +1,7 @@
 using Base.Test
 using CUDArt
 using CUDNN
-@show CUDNN_VERSION
+@show CUDNN_VERSION # this is set at runtime in CUDNN.jl, not fixed in types.jl
 
 # Uncomment this if you want lots of messages:
 # Base.Test.default_handler(r::Base.Test.Success) = info("$(r.expr)")
@@ -43,6 +43,23 @@ end
 # be improved in future releases.
 
 
+using CUDNN: cudnnGetVersion, cudnnGetErrorString, CUDNN_STATUS_SUCCESS
+@show cudnnGetVersion()
+@show cudnnGetErrorString(CUDNN_STATUS_SUCCESS)
+
+# TODO: handle type conflict between CUDArt and CUDNN when handling streams
+# using CUDNN: cudnnCreate, cudnnDestroy, cudnnHandle_t, cudnnSetStream, cudnnGetStream, cudaStream_t
+# hptr = cudnnHandle_t[0]
+# cudnnCreate(hptr)
+# sptr = cudaStream_t[0]
+# CUDArt.rt.cudaStreamCreate(sptr) # library already checks == CUDArt.rt.cudaSuccess
+# cudnnSetStream(hptr[1], sptr[1]) # library already checks == CUDNN_STATUS_SUCCESS in cudnnCheck
+# tptr = cudaStream_t[0]
+# cudnnGetStream(hptr[1], tptr)
+# @test sptr[1] == tptr[1]
+# CUDArt.rt.cudaStreamDestroy(sptr[1])
+# cudnnDestroy(hptr[1])
+
 using CUDNN: cudnnTensorDescriptor_t, cudnnCreateTensorDescriptor, cudnnSetTensor4dDescriptor, CUDNN_TENSOR_NCHW, CUDNN_DATA_DOUBLE, cudnnDataType_t, cudnnGetTensor4dDescriptor
 d = cudnnTensorDescriptor_t[0]
 cudnnCreateTensorDescriptor(pointer(d))
@@ -75,7 +92,12 @@ ty = CudaArray(y)
 using CUDNN: cudnnAddTensor
 b = rand(1,1,3,1)
 tb = CudaArray(b)
+x = rand(5,4,3,2)
+tx = CudaArray(x)
 @test to_host(cudnnAddTensor(tb,tx)) == x .+ b
+x = rand(5,4,3,2)
+tx = CudaArray(x)
+@test to_host(cudnnAddTensor(tb,tx;alpha=2,beta=3)) == 2b .+ 3x
 
 
 using CUDNN: cudnnSetTensor
@@ -132,24 +154,31 @@ ty = zeros(tx)
 @test epseq(to_host(cudnnSoftmaxForward(tx, ty; mode=CUDNN_SOFTMAX_MODE_INSTANCE)), exp(x)./sum(exp(x), (1,2,3)))
 @test epseq(to_host(cudnnSoftmaxForward(tx, ty; mode=CUDNN_SOFTMAX_MODE_CHANNEL)), exp(x)./sum(exp(x), 3))
 
+
+# Do we feed the gold probabilities p or the output gradients (1-p/q) to cudnnSoftmaxBackward?
+# It turns out we feed 1-p/q, which is numerically unstable.
+# x: unnormalized logp
+# q: normalized estimates  qi=(exp xi)/(Σ exp xj)  q=softmaxForward(x)
+# p: gold answers
+# J = -Σ p log q
+# dJ/dq = 1-p/q
+# dJ/dx = q-p
+
 using CUDNN: cudnnSoftmaxBackward
-# If y[c,j] is the probability of the correct answer for the j'th instance:
-# dy[c,j] = -1/y[c,j]
-# dy[i!=c,j] = 1/y[c,j]
-x = (rand(1,1,5,4) - 0.5); tx = CudaArray(x); ty = zeros(tx)
-cudnnSoftmaxForward(tx,ty); y = to_host(ty)
-r = rand(1:size(y,3), size(y,4)) # Random answer key
-c = sub2ind((size(y,3),size(y,4)), r, 1:size(y,4)) # indices of correct answers
-p = y[c] # probabilities of correct answers
-dy = zeros(y)
-for i=1:size(dy,3); dy[:,:,i,:] = 1./p; end  # dy = 1/p for incorrect answers
-dy[c] *= -1.0 # dy = -1/p for correct answers
-dy *= 0.5  # this is a cudnn bug
-tdy = CudaArray(dy)
-tdx = zeros(tdy)
-# We should have dx = y-1 for correct answers, dx = y for wrong answers
-dx = copy(y); dx[c] .-= 1
-@test epseq(to_host(cudnnSoftmaxBackward(ty, tdy, tdx)), dx)
+# Model probabilities:
+x = (rand(5,4) - 0.5); tx = CudaArray(reshape(x,(1,1,5,4))); tq = zeros(tx)
+cudnnSoftmaxForward(tx,tq); q = squeeze(to_host(tq),(1,2))
+# Gold probabilities:
+z = (rand(5,4) - 0.5); tz = CudaArray(reshape(z,(1,1,5,4))); tp = zeros(tz)
+cudnnSoftmaxForward(tz,tp); p = squeeze(to_host(tp),(1,2))
+# Gradient wrt softmax output:
+dq = 1-p./q; tdq = CudaArray(reshape(dq,(1,1,5,4)))
+# Gradient wrt softmax input:
+tdx = similar(tdq)
+cudnnSoftmaxBackward(tq, tdq, tdx)
+dx = squeeze(to_host(tdx),(1,2))
+@test epseq(dx,q-p)
+
 
 # Discovering what pooling does:
 # using CUDNN: cudnnPoolingDescriptor_t, cudnnCreatePoolingDescriptor, cudnnSetPooling2dDescriptor
@@ -221,6 +250,7 @@ pd5 = PD(2, 3, 1, 1, CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING)
 ty6 = CudaArray(zeros(5, 4, 1, 1))
 pd6 = PD(2, 3, 1, 1, CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING)
 @test cudnnGetPoolingNdForwardOutputDim(pd6, tx) == (5,4,1,1)
+# CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING is buggy:
 @show squeeze(to_host(cudnnPoolingForward(tx, ty6; pd=pd6)),(3,4)) == [16/4 39/6 69/6 56/4; 27/6 7 12 87/6; 33/6 8 13 93/6; 39/6 9 14 99/6; 28/4 57/6 87/6 68/4]
 
 dy4 = reshape(Float64[1:20;], 5, 4, 1, 1); 
@@ -230,7 +260,7 @@ tdx4 = zeros(tx)
 tdx5 = zeros(tx)
 @test epseq(squeeze(to_host(cudnnPoolingBackward(ty5, tdy4, tx, tdx5; pd=pd5)),(3,4)), [16/9 39/9 69/9 56/9; 3 7 12 87/9; 33/9 8 13 93/9; 39/9 9 14 11; 28/9 57/9 87/9 68/9])
 tdx6 = zeros(tx)
-# Buggy fails test:
+# CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING is buggy:
 @show epseq(squeeze(to_host(cudnnPoolingBackward(ty6, tdy4, tx, tdx6; pd=pd6)),(3,4)), [1/9 5/9 5/9 4/9;3/9 12/9 12/9 9/9;6/9 21/9 21/9 15/9;5/9 16/9 16/9 11/9;3/9 9/9 9/9 6/9])
 
 # 3 size, 1 pad, 2 stride
@@ -246,13 +276,28 @@ pd8 = PD(2, 3, 1, 2, CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING)
 # This is buggy in the library:
 ty9 = CudaArray(zeros(3, 3, 1, 1))
 pd9 = PD(2, 3, 1, 2, CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING)
+# CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING is buggy:
 @show squeeze(to_host(cudnnPoolingForward(tx, ty9; pd=pd9)),(3,4)) == [16/4 69/6 33/2; 33/6 13 54/3; 28/4 87/6 39/2]
 
-# 3D pooling not supported:
-# x10 = reshape(Float64[1:60;], 5, 4, 3, 1, 1); tx10 = CudaArray(x10)
-# ty10 = CudaArray(zeros(3, 2, 1, 1, 1))
-# pd10 = PoolingDescriptor((3,3,3); padding=(0,0,0), stride=(1,1,1), mode=CUDNN_POOLING_MAX)
-# @show cudnnPoolingForward(pd10, tx10, ty10)
+dy7 = reshape(Float64[1:9;], 3, 3, 1, 1); 
+tdy7 = CudaArray(dy7)
+tdx7 = zeros(tx)
+# TODO: check this answer
+@test squeeze(to_host(cudnnPoolingBackward(ty7, tdy7, tx, tdx7; pd=pd7)),(3,4)) == [0 0 0 0;0 1 0 11;0 0 0 0;0 2 0 13;0 3 0 15.]
+tdx8 = zeros(tx)
+# TODO: check this answer
+@test epseq(squeeze(to_host(cudnnPoolingBackward(ty8, tdy7, tx, tdx8; pd=pd8)),(3,4)), [1/9 5/9 4/9 29/18; 1/3 4/3 1 7/2; 2/9 7/9 5/9 17/9; 5/9 16/9 11/9 73/18; 1/3 1 2/3 39/18])
+tdx9 = zeros(tx)
+# CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING is buggy:
+# TODO: find this answer
+@show squeeze(to_host(cudnnPoolingBackward(ty9, tdy7, tx, tdx9; pd=pd9)),(3,4)) == 0
+
+# 3D pooling support added in v3
+x10 = reshape(Float64[1:60;], 5, 4, 3, 1, 1); tx10 = CudaArray(x10)
+ty10 = CudaArray(zeros(3, 2, 1, 1, 1))
+pd10 = PD(3, 3, 0, 1, CUDNN_POOLING_MAX)
+# TODO: add 3d pooling tests
+@show cudnnPoolingForward(tx10, ty10; pd=pd10)
 
 
 # Filters are basically the same as tensors:
@@ -345,5 +390,31 @@ w = rand(3,3); tw = CudaArray(reshape(w, (3,3,1,1)))
 padding=map(x->x-1,size(w))
 @test epseq(squeeze(to_host(cudnnConvolutionForward(tx, tw; cd=CD(tx; padding=padding))),(3,4)), conv2(x,w))
 @test epseq(squeeze(to_host(conv2(tx, tw)), (3,4)), conv2(x,w))
+
+# LRN: TODO: add tests
+x = rand(5,4); tx = CudaArray(reshape(x, (5,4,1,1)))
+ty = similar(tx)
+cudnnLRNCrossChannelForward(tx,ty)
+y = squeeze(to_host(ty), (3,4))
+dy = rand(5,4); tdy = CudaArray(reshape(x, (5,4,1,1)))
+tdx = similar(tdy)
+cudnnLRNCrossChannelBackward(ty, tdy, tx, tdx)
+dx = squeeze(to_host(tdx), (3,4))
+
+
+# DivisiveNormalization
+x = rand(5,4); tx = CudaArray(reshape(x, (5,4,1,1)))
+ty = similar(tx)
+cudnnDivisiveNormalizationForward(tx,ty)
+y = squeeze(to_host(ty), (3,4))
+dy = rand(5,4); tdy = CudaArray(reshape(x, (5,4,1,1)))
+tdx = similar(tdy)
+cudnnDivisiveNormalizationBackward(ty, tdy, tdx)
+dx = squeeze(to_host(tdx), (3,4))
+
+println(x)
+println(y)
+println(dy)
+println(dx)
 
 :ok
