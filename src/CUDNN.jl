@@ -10,9 +10,22 @@
 
 ### 0. INIT ##################################################
 
+isdefined(Base, :__precompile__) && __precompile__()
 module CUDNN
 using Compat
 using CUDArt
+
+cudnnHandle = nothing
+
+function __init__()
+    # Setup default cudnn handle
+    global cudnnHandle
+    cudnnHandlePtr = cudnnHandle_t[0]
+    cudnnCreate(cudnnHandlePtr)
+    cudnnHandle = cudnnHandlePtr[1]
+    # destroy cudnn handle at julia exit
+    atexit(()->cudnnDestroy(cudnnHandle))
+end
 
 const libcudnn = Libdl.find_library(["libcudnn"])
 isempty(libcudnn) && error("CUDNN library cannot be found")
@@ -69,13 +82,6 @@ cudnnDataType(::Type{Float64})=CUDNN_DATA_DOUBLE
 juliaDataType(a)=(a==CUDNN_DATA_HALF ? Float16 :
                   a==CUDNN_DATA_FLOAT ? Float32 :
                   a==CUDNN_DATA_DOUBLE ? Float64 : error())
-
-# Setup default cudnn handle
-cudnnHandlePtr = cudnnHandle_t[0]
-cudnnCreate(cudnnHandlePtr)
-cudnnHandle = cudnnHandlePtr[1]
-# destroy cudnn handle at julia exit
-atexit(()->cudnnDestroy(cudnnHandle))
 
 
 ### 1. DESCRIPTORS ##################################################
@@ -145,20 +151,20 @@ end
 PD(; ndims=2, window=2, padding=0, stride=window, mode=CUDNN_POOLING_MAX)=PD(ndims,window,padding,stride,mode)
 PD(a::AbstractCudaArray; o...)=PD(; o..., ndims=ndims(a)-2)
 
-function LD(n, alpha, beta, k)
+function LD(lrnN, lrnAlpha, lrnBeta, lrnK)
     ld = cudnnLRNDescriptor_t[0]
     cudnnCreateLRNDescriptor(ld)
-    cudnnSetLRNDescriptor(ld[1], n, alpha, beta, k)
+    cudnnSetLRNDescriptor(ld[1], lrnN, lrnAlpha, lrnBeta, lrnK)
     this = LD(ld[1])
     finalizer(this, free)
     return this
 end
 
-# n: Normalization window width in elements. LRN layer uses a window [center-lookBehind, center+lookAhead], where lookBehind = floor( (lrnN-1)/2 ), lookAhead = lrnN-lookBehind-1. So for n=10, the window is [k-4...k...k+5] with a total of 10 samples. For DivisiveNormalization layer the window has the same extents as above in all 'spatial' dimensions (dimA[2], dimA[3], dimA[4]). By default lrnN is set to 5 in cudnnCreateLRNDescriptor.
-# alpha: Value of the alpha variance scaling parameter in the normalization formula. Inside the library code this value is divided by the window width for LRN and by (window width)^#spatialDimensions for DivisiveNormalization. By default this value is set to 1e-4 in cudnnCreateLRNDescriptor.
-# beta: Value of the beta power parameter in the normalization formula. By default this value is set to 0.75 in cudnnCreateLRNDescriptor.
-# k: Value of the k parameter in normalization formula. By default this value is set to 2.0.
-LD(; n=5, alpha=1e-4, beta=0.75, k=2.0)=LD(n, alpha, beta, k)
+# lrnN: Normalization window width in elements. LRN layer uses a window [center-lookBehind, center+lookAhead], where lookBehind = floor( (lrnN-1)/2 ), lookAhead = lrnN-lookBehind-1. So for lrnN=10, the window is [k-4...k...k+5] with a total of 10 samples. For DivisiveNormalization layer the window has the same extents as above in all 'spatial' dimensions (dimA[2], dimA[3], dimA[4]). By default lrnN is set to 5 in cudnnCreateLRNDescriptor.
+# lrnAlpha: Value of the alpha variance scaling parameter in the normalization formula. Inside the library code this value is divided by the window width for LRN and by (window width)^#spatialDimensions for DivisiveNormalization. By default this value is set to 1e-4 in cudnnCreateLRNDescriptor.
+# lrnBeta: Value of the beta power parameter in the normalization formula. By default this value is set to 0.75 in cudnnCreateLRNDescriptor.
+# lrnK: Value of the k parameter in normalization formula. By default this value is set to 2.0.
+LD(; lrnN=5, lrnAlpha=1e-4, lrnBeta=0.75, lrnK=2.0)=LD(lrnN, lrnAlpha, lrnBeta, lrnK)
 
 
 # This is missing from CUDNN although mentioned in the documentation
@@ -216,9 +222,9 @@ function cudnnGetPoolingNdDescriptor(pd::PD)
 end
 
 function cudnnGetLRNDescriptor(ld::LD)
-    n = Cuint[0]; alpha=Cdouble[0]; beta=Cdouble[0]; k=Cdouble[0]
-    cudnnGetLRNDescriptor(ld, n, alpha, beta, k)
-    (n[1], alpha[1], beta[1], k[1])
+    lrnN = Cuint[0]; lrnAlpha=Cdouble[0]; lrnBeta=Cdouble[0]; lrnK=Cdouble[0]
+    cudnnGetLRNDescriptor(ld, lrnN, lrnAlpha, lrnBeta, lrnK)
+    (lrnN[1], lrnAlpha[1], lrnBeta[1], lrnK[1])
 end
 
 ### 2. CONVOLUTION ##################################################
