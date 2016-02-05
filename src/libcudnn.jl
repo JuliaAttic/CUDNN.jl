@@ -58,19 +58,19 @@ function cudnnTransformTensor(handle,alpha,srcDesc,srcData,beta,destDesc,destDat
     cudnnCheck(ccall((:cudnnTransformTensor,libcudnn),cudnnStatus_t,(cudnnHandle_t,Ptr{Void},cudnnTensorDescriptor_t,Ptr{Void},Ptr{Void},cudnnTensorDescriptor_t,Ptr{Void}),handle,alpha,srcDesc,srcData,beta,destDesc,destData))
 end
 
-if CUDNN_VERSION >= 3000
-
+if CUDNN_VERSION >= 4000
+    function cudnnAddTensor(handle,alpha,biasDesc,biasData,beta,srcDestDesc,srcDestData)
+        cudnnCheck(ccall((:cudnnAddTensor,libcudnn),cudnnStatus_t,(cudnnHandle_t,Ptr{Void},cudnnTensorDescriptor_t,Ptr{Void},Ptr{Void},cudnnTensorDescriptor_t,Ptr{Void}),handle,alpha,biasDesc,biasData,beta,srcDestDesc,srcDestData))
+    end
+elseif CUDNN_VERSION >= 3000
     function cudnnAddTensor(handle,alpha,biasDesc,biasData,beta,srcDestDesc,srcDestData)
         cudnnCheck(ccall((:cudnnAddTensor_v3,libcudnn),cudnnStatus_t,(cudnnHandle_t,Ptr{Void},cudnnTensorDescriptor_t,Ptr{Void},Ptr{Void},cudnnTensorDescriptor_t,Ptr{Void}),handle,alpha,biasDesc,biasData,beta,srcDestDesc,srcDestData))
     end
-
-else # if CUDNN_VERSION >= 3000
-
+else
     function cudnnAddTensor(handle,mode,alpha,biasDesc,biasData,beta,srcDestDesc,srcDestData)
         cudnnCheck(ccall((:cudnnAddTensor,libcudnn),cudnnStatus_t,(cudnnHandle_t,cudnnAddMode_t,Ptr{Void},cudnnTensorDescriptor_t,Ptr{Void},Ptr{Void},cudnnTensorDescriptor_t,Ptr{Void}),handle,mode,alpha,biasDesc,biasData,beta,srcDestDesc,srcDestData))
     end
-
-end  # if CUDNN_VERSION >= 3000
+end
 
 function cudnnSetTensor(handle,srcDestDesc,srcDestData,value)
     cudnnCheck(ccall((:cudnnSetTensor,libcudnn),cudnnStatus_t,(cudnnHandle_t,cudnnTensorDescriptor_t,Ptr{Void},Ptr{Void}),handle,srcDestDesc,srcDestData,value))
@@ -84,21 +84,34 @@ function cudnnCreateFilterDescriptor(filterDesc)
     cudnnCheck(ccall((:cudnnCreateFilterDescriptor,libcudnn),cudnnStatus_t,(Ptr{cudnnFilterDescriptor_t},),filterDesc))
 end
 
-function cudnnSetFilter4dDescriptor(filterDesc,dataType,k,c,h,w)
-    cudnnCheck(ccall((:cudnnSetFilter4dDescriptor,libcudnn),cudnnStatus_t,(cudnnFilterDescriptor_t,cudnnDataType_t,Cint,Cint,Cint,Cint),filterDesc,dataType,k,c,h,w))
+if CUDNN_VERSION >= 4000
+    function cudnnSetFilter4dDescriptor_v4(filterDesc,dataType,format,k,c,h,w)
+        cudnnCheck(ccall((:cudnnSetFilter4dDescriptor,libcudnn),cudnnStatus_t,(cudnnFilterDescriptor_t,cudnnDataType_t,cudnnTensorFormat_t,Cint,Cint,Cint,Cint),filterDesc,dataType,k,c,h,w))
+    end
+    function cudnnGetFilter4dDescriptor_v4(filterDesc,dataType,format,k,c,h,w)
+        cudnnCheck(ccall((:cudnnGetFilter4dDescriptor,libcudnn),cudnnStatus_t,(cudnnFilterDescriptor_t,Ptr{cudnnDataType_t},Ptr{Cint},Ptr{cudnnTensorFormat_t},Ptr{Cint},Ptr{Cint},Ptr{Cint}),filterDesc,dataType,k,c,h,w))
+    end
+    function cudnnSetFilterNdDescriptor(filterDesc,dataType,format,nbDims,filterDimA)
+        cudnnCheck(ccall((:cudnnSetFilterNdDescriptor,libcudnn),cudnnStatus_t,(cudnnFilterDescriptor_t,cudnnDataType_t,cudnnTensorFormat_t,Cint,Ptr{Cint}),filterDesc,dataType,nbDims,filterDimA))
+    end
+    function cudnnGetFilterNdDescriptor(filterDesc,nbDimsRequested,dataType,format,nbDims,filterDimA)
+        cudnnCheck(ccall((:cudnnGetFilterNdDescriptor,libcudnn),cudnnStatus_t,(cudnnFilterDescriptor_t,Cint,Ptr{cudnnDataType_t},Ptr{cudnnTensorFormat_t},Ptr{Cint},Ptr{Cint}),filterDesc,nbDimsRequested,dataType,nbDims,filterDimA))
+    end
+else
+    function cudnnSetFilter4dDescriptor(filterDesc,dataType,k,c,h,w)
+        cudnnCheck(ccall((:cudnnSetFilter4dDescriptor,libcudnn),cudnnStatus_t,(cudnnFilterDescriptor_t,cudnnDataType_t,Cint,Cint,Cint,Cint),filterDesc,dataType,k,c,h,w))
+    end
+    function cudnnGetFilter4dDescriptor(filterDesc,dataType,k,c,h,w)
+        cudnnCheck(ccall((:cudnnGetFilter4dDescriptor,libcudnn),cudnnStatus_t,(cudnnFilterDescriptor_t,Ptr{cudnnDataType_t},Ptr{Cint},Ptr{Cint},Ptr{Cint},Ptr{Cint}),filterDesc,dataType,k,c,h,w))
+    end
+    function cudnnSetFilterNdDescriptor(filterDesc,dataType,nbDims,filterDimA)
+        cudnnCheck(ccall((:cudnnSetFilterNdDescriptor,libcudnn),cudnnStatus_t,(cudnnFilterDescriptor_t,cudnnDataType_t,Cint,Ptr{Cint}),filterDesc,dataType,nbDims,filterDimA))
+    end
+    function cudnnGetFilterNdDescriptor(filterDesc,nbDimsRequested,dataType,nbDims,filterDimA)
+        cudnnCheck(ccall((:cudnnGetFilterNdDescriptor,libcudnn),cudnnStatus_t,(cudnnFilterDescriptor_t,Cint,Ptr{cudnnDataType_t},Ptr{Cint},Ptr{Cint}),filterDesc,nbDimsRequested,dataType,nbDims,filterDimA))
+    end
 end
 
-function cudnnGetFilter4dDescriptor(filterDesc,dataType,k,c,h,w)
-    cudnnCheck(ccall((:cudnnGetFilter4dDescriptor,libcudnn),cudnnStatus_t,(cudnnFilterDescriptor_t,Ptr{cudnnDataType_t},Ptr{Cint},Ptr{Cint},Ptr{Cint},Ptr{Cint}),filterDesc,dataType,k,c,h,w))
-end
-
-function cudnnSetFilterNdDescriptor(filterDesc,dataType,nbDims,filterDimA)
-    cudnnCheck(ccall((:cudnnSetFilterNdDescriptor,libcudnn),cudnnStatus_t,(cudnnFilterDescriptor_t,cudnnDataType_t,Cint,Ptr{Cint}),filterDesc,dataType,nbDims,filterDimA))
-end
-
-function cudnnGetFilterNdDescriptor(filterDesc,nbDimsRequested,dataType,nbDims,filterDimA)
-    cudnnCheck(ccall((:cudnnGetFilterNdDescriptor,libcudnn),cudnnStatus_t,(cudnnFilterDescriptor_t,Cint,Ptr{cudnnDataType_t},Ptr{Cint},Ptr{Cint}),filterDesc,nbDimsRequested,dataType,nbDims,filterDimA))
-end
 
 function cudnnDestroyFilterDescriptor(filterDesc)
     cudnnCheck(ccall((:cudnnDestroyFilterDescriptor,libcudnn),cudnnStatus_t,(cudnnFilterDescriptor_t,),filterDesc))
@@ -120,26 +133,27 @@ function cudnnGetConvolution2dForwardOutputDim(convDesc,inputTensorDesc,filterDe
     cudnnCheck(ccall((:cudnnGetConvolution2dForwardOutputDim,libcudnn),cudnnStatus_t,(cudnnConvolutionDescriptor_t,cudnnTensorDescriptor_t,cudnnFilterDescriptor_t,Ptr{Cint},Ptr{Cint},Ptr{Cint},Ptr{Cint}),convDesc,inputTensorDesc,filterDesc,n,c,h,w))
 end
 
-if CUDNN_VERSION >= 3000
-
+if CUDNN_VERSION >= 4000
+    function cudnnSetConvolutionNdDescriptor(convDesc,arrayLength,padA,filterStrideA,upscaleA,mode,dataType)
+        cudnnCheck(ccall((:cudnnSetConvolutionNdDescriptor,libcudnn),cudnnStatus_t,(cudnnConvolutionDescriptor_t,Cint,Ptr{Cint},Ptr{Cint},Ptr{Cint},cudnnConvolutionMode_t,cudnnDataType_t),convDesc,arrayLength,padA,filterStrideA,upscaleA,mode,dataType))
+    end
+    function cudnnGetConvolutionNdDescriptor(convDesc,arrayLengthRequested,arrayLength,padA,strideA,upscaleA,mode,dataType)
+        cudnnCheck(ccall((:cudnnGetConvolutionNdDescriptor,libcudnn),cudnnStatus_t,(cudnnConvolutionDescriptor_t,Cint,Ptr{Cint},Ptr{Cint},Ptr{Cint},Ptr{Cint},Ptr{cudnnConvolutionMode_t},Ptr{cudnnDataType_t}),convDesc,arrayLengthRequested,arrayLength,padA,strideA,upscaleA,mode,dataType))
+    end
+elseif CUDNN_VERSION >= 3000
     function cudnnSetConvolutionNdDescriptor(convDesc,arrayLength,padA,filterStrideA,upscaleA,mode,dataType)
         cudnnCheck(ccall((:cudnnSetConvolutionNdDescriptor_v3,libcudnn),cudnnStatus_t,(cudnnConvolutionDescriptor_t,Cint,Ptr{Cint},Ptr{Cint},Ptr{Cint},cudnnConvolutionMode_t,cudnnDataType_t),convDesc,arrayLength,padA,filterStrideA,upscaleA,mode,dataType))
     end
-
     function cudnnGetConvolutionNdDescriptor(convDesc,arrayLengthRequested,arrayLength,padA,strideA,upscaleA,mode,dataType)
         cudnnCheck(ccall((:cudnnGetConvolutionNdDescriptor_v3,libcudnn),cudnnStatus_t,(cudnnConvolutionDescriptor_t,Cint,Ptr{Cint},Ptr{Cint},Ptr{Cint},Ptr{Cint},Ptr{cudnnConvolutionMode_t},Ptr{cudnnDataType_t}),convDesc,arrayLengthRequested,arrayLength,padA,strideA,upscaleA,mode,dataType))
     end
-
 else # if CUDNN_VERSION >= 3000
-
     function cudnnSetConvolutionNdDescriptor(convDesc,arrayLength,padA,filterStrideA,upscaleA,mode)
         cudnnCheck(ccall((:cudnnSetConvolutionNdDescriptor,libcudnn),cudnnStatus_t,(cudnnConvolutionDescriptor_t,Cint,Ptr{Cint},Ptr{Cint},Ptr{Cint},cudnnConvolutionMode_t),convDesc,arrayLength,padA,filterStrideA,upscaleA,mode))
     end
-
     function cudnnGetConvolutionNdDescriptor(convDesc,arrayLengthRequested,arrayLength,padA,strideA,upscaleA,mode)
         cudnnCheck(ccall((:cudnnGetConvolutionNdDescriptor,libcudnn),cudnnStatus_t,(cudnnConvolutionDescriptor_t,Cint,Ptr{Cint},Ptr{Cint},Ptr{Cint},Ptr{Cint},Ptr{cudnnConvolutionMode_t}),convDesc,arrayLengthRequested,arrayLength,padA,strideA,upscaleA,mode))
     end
-
 end # if CUDNN_VERSION >= 3000
 
 function cudnnGetConvolutionNdForwardOutputDim(convDesc,inputTensorDesc,filterDesc,nbDims,tensorOuputDimA)
@@ -194,26 +208,27 @@ function cudnnGetConvolutionBackwardDataWorkspaceSize(handle,filterDesc,diffDesc
     cudnnCheck(ccall((:cudnnGetConvolutionBackwardDataWorkspaceSize,libcudnn),cudnnStatus_t,(cudnnHandle_t,cudnnFilterDescriptor_t,cudnnTensorDescriptor_t,cudnnConvolutionDescriptor_t,cudnnTensorDescriptor_t,cudnnConvolutionBwdDataAlgo_t,Ptr{Csize_t}),handle,filterDesc,diffDesc,convDesc,gradDesc,algo,sizeInBytes))
 end
 
-if CUDNN_VERSION >= 3000
-
+if CUDNN_VERSION >= 4000
+    function cudnnConvolutionBackwardFilter(handle,alpha,srcDesc,srcData,diffDesc,diffData,convDesc,algo,workSpace,workSpaceSizeInBytes,beta,gradDesc,gradData)
+        cudnnCheck(ccall((:cudnnConvolutionBackwardFilter,libcudnn),cudnnStatus_t,(cudnnHandle_t,Ptr{Void},cudnnTensorDescriptor_t,Ptr{Void},cudnnTensorDescriptor_t,Ptr{Void},cudnnConvolutionDescriptor_t,cudnnConvolutionBwdFilterAlgo_t,Ptr{Void},Csize_t,Ptr{Void},cudnnFilterDescriptor_t,Ptr{Void}),handle,alpha,srcDesc,srcData,diffDesc,diffData,convDesc,algo,workSpace,workSpaceSizeInBytes,beta,gradDesc,gradData))
+    end
+    function cudnnConvolutionBackwardData(handle,alpha,filterDesc,filterData,diffDesc,diffData,convDesc,algo,workSpace,workSpaceSizeInBytes,beta,gradDesc,gradData)
+        cudnnCheck(ccall((:cudnnConvolutionBackwardData,libcudnn),cudnnStatus_t,(cudnnHandle_t,Ptr{Void},cudnnFilterDescriptor_t,Ptr{Void},cudnnTensorDescriptor_t,Ptr{Void},cudnnConvolutionDescriptor_t,cudnnConvolutionBwdDataAlgo_t,Ptr{Void},Csize_t,Ptr{Void},cudnnTensorDescriptor_t,Ptr{Void}),handle,alpha,filterDesc,filterData,diffDesc,diffData,convDesc,algo,workSpace,workSpaceSizeInBytes,beta,gradDesc,gradData))
+    end
+elseif CUDNN_VERSION >= 3000
     function cudnnConvolutionBackwardFilter(handle,alpha,srcDesc,srcData,diffDesc,diffData,convDesc,algo,workSpace,workSpaceSizeInBytes,beta,gradDesc,gradData)
         cudnnCheck(ccall((:cudnnConvolutionBackwardFilter_v3,libcudnn),cudnnStatus_t,(cudnnHandle_t,Ptr{Void},cudnnTensorDescriptor_t,Ptr{Void},cudnnTensorDescriptor_t,Ptr{Void},cudnnConvolutionDescriptor_t,cudnnConvolutionBwdFilterAlgo_t,Ptr{Void},Csize_t,Ptr{Void},cudnnFilterDescriptor_t,Ptr{Void}),handle,alpha,srcDesc,srcData,diffDesc,diffData,convDesc,algo,workSpace,workSpaceSizeInBytes,beta,gradDesc,gradData))
     end
-
     function cudnnConvolutionBackwardData(handle,alpha,filterDesc,filterData,diffDesc,diffData,convDesc,algo,workSpace,workSpaceSizeInBytes,beta,gradDesc,gradData)
         cudnnCheck(ccall((:cudnnConvolutionBackwardData_v3,libcudnn),cudnnStatus_t,(cudnnHandle_t,Ptr{Void},cudnnFilterDescriptor_t,Ptr{Void},cudnnTensorDescriptor_t,Ptr{Void},cudnnConvolutionDescriptor_t,cudnnConvolutionBwdDataAlgo_t,Ptr{Void},Csize_t,Ptr{Void},cudnnTensorDescriptor_t,Ptr{Void}),handle,alpha,filterDesc,filterData,diffDesc,diffData,convDesc,algo,workSpace,workSpaceSizeInBytes,beta,gradDesc,gradData))
     end
-
 else # if CUDNN_VERSION >= 3000
-
     function cudnnConvolutionBackwardFilter(handle,alpha,srcDesc,srcData,diffDesc,diffData,convDesc,beta,gradDesc,gradData)
         cudnnCheck(ccall((:cudnnConvolutionBackwardFilter,libcudnn),cudnnStatus_t,(cudnnHandle_t,Ptr{Void},cudnnTensorDescriptor_t,Ptr{Void},cudnnTensorDescriptor_t,Ptr{Void},cudnnConvolutionDescriptor_t,Ptr{Void},cudnnFilterDescriptor_t,Ptr{Void}),handle,alpha,srcDesc,srcData,diffDesc,diffData,convDesc,beta,gradDesc,gradData))
     end
-
     function cudnnConvolutionBackwardData(handle,alpha,filterDesc,filterData,diffDesc,diffData,convDesc,beta,gradDesc,gradData)
         cudnnCheck(ccall((:cudnnConvolutionBackwardData,libcudnn),cudnnStatus_t,(cudnnHandle_t,Ptr{Void},cudnnFilterDescriptor_t,Ptr{Void},cudnnTensorDescriptor_t,Ptr{Void},cudnnConvolutionDescriptor_t,Ptr{Void},cudnnTensorDescriptor_t,Ptr{Void}),handle,alpha,filterDesc,filterData,diffDesc,diffData,convDesc,beta,gradDesc,gradData))
     end
-
 end # if CUDNN_VERSION >= 3000
 
 
@@ -233,20 +248,32 @@ function cudnnCreatePoolingDescriptor(poolingDesc)
     cudnnCheck(ccall((:cudnnCreatePoolingDescriptor,libcudnn),cudnnStatus_t,(Ptr{cudnnPoolingDescriptor_t},),poolingDesc))
 end
 
-function cudnnSetPooling2dDescriptor(poolingDesc,mode,windowHeight,windowWidth,verticalPadding,horizontalPadding,verticalStride,horizontalStride)
-    cudnnCheck(ccall((:cudnnSetPooling2dDescriptor,libcudnn),cudnnStatus_t,(cudnnPoolingDescriptor_t,cudnnPoolingMode_t,Cint,Cint,Cint,Cint,Cint,Cint),poolingDesc,mode,windowHeight,windowWidth,verticalPadding,horizontalPadding,verticalStride,horizontalStride))
-end
-
-function cudnnGetPooling2dDescriptor(poolingDesc,mode,windowHeight,windowWidth,verticalPadding,horizontalPadding,verticalStride,horizontalStride)
-    cudnnCheck(ccall((:cudnnGetPooling2dDescriptor,libcudnn),cudnnStatus_t,(cudnnPoolingDescriptor_t,Ptr{cudnnPoolingMode_t},Ptr{Cint},Ptr{Cint},Ptr{Cint},Ptr{Cint},Ptr{Cint},Ptr{Cint}),poolingDesc,mode,windowHeight,windowWidth,verticalPadding,horizontalPadding,verticalStride,horizontalStride))
-end
-
-function cudnnSetPoolingNdDescriptor(poolingDesc,mode,nbDims,windowDimA,paddingA,strideA)
-    cudnnCheck(ccall((:cudnnSetPoolingNdDescriptor,libcudnn),cudnnStatus_t,(cudnnPoolingDescriptor_t,cudnnPoolingMode_t,Cint,Ptr{Cint},Ptr{Cint},Ptr{Cint}),poolingDesc,mode,nbDims,windowDimA,paddingA,strideA))
-end
-
-function cudnnGetPoolingNdDescriptor(poolingDesc,nbDimsRequested,mode,nbDims,windowDimA,paddingA,strideA)
-    cudnnCheck(ccall((:cudnnGetPoolingNdDescriptor,libcudnn),cudnnStatus_t,(cudnnPoolingDescriptor_t,Cint,Ptr{cudnnPoolingMode_t},Ptr{Cint},Ptr{Cint},Ptr{Cint},Ptr{Cint}),poolingDesc,nbDimsRequested,mode,nbDims,windowDimA,paddingA,strideA))
+if CUDNN_VERSION >= 4000
+    function cudnnSetPooling2dDescriptor(poolingDesc,mode,maxpoolingNanOpt,windowHeight,windowWidth,verticalPadding,horizontalPadding,verticalStride,horizontalStride)
+        cudnnCheck(ccall((:cudnnSetPooling2dDescriptor_v4,libcudnn),cudnnStatus_t,(cudnnPoolingDescriptor_t,cudnnPoolingMode_t,cudnnNanPropagation_t,Cint,Cint,Cint,Cint,Cint,Cint),poolingDesc,mode,maxpoolingNanOpt,windowHeight,windowWidth,verticalPadding,horizontalPadding,verticalStride,horizontalStride))
+    end
+    function cudnnGetPooling2dDescriptor(poolingDesc,mode,maxpoolingNanOpt,windowHeight,windowWidth,verticalPadding,horizontalPadding,verticalStride,horizontalStride)
+        cudnnCheck(ccall((:cudnnGetPooling2dDescriptor_v4,libcudnn),cudnnStatus_t,(cudnnPoolingDescriptor_t,Ptr{cudnnPoolingMode_t},Ptr{cudnnNanPropagation_t},Ptr{Cint},Ptr{Cint},Ptr{Cint},Ptr{Cint},Ptr{Cint},Ptr{Cint}),poolingDesc,mode,maxpoolingNanOpt,windowHeight,windowWidth,verticalPadding,horizontalPadding,verticalStride,horizontalStride))
+    end
+    function cudnnSetPoolingNdDescriptor(poolingDesc,mode,maxpoolingNanOpt,nbDims,windowDimA,paddingA,strideA)
+        cudnnCheck(ccall((:cudnnSetPoolingNdDescriptor_v4,libcudnn),cudnnStatus_t,(cudnnPoolingDescriptor_t,cudnnPoolingMode_t,cudnnNanPropagation_t,Cint,Ptr{Cint},Ptr{Cint},Ptr{Cint}),poolingDesc,mode,maxpoolingNanOpt,nbDims,windowDimA,paddingA,strideA))
+    end
+    function cudnnGetPoolingNdDescriptor(poolingDesc,nbDimsRequested,mode,maxpoolingNanOpt,nbDims,windowDimA,paddingA,strideA)
+        cudnnCheck(ccall((:cudnnGetPoolingNdDescriptor_v4,libcudnn),cudnnStatus_t,(cudnnPoolingDescriptor_t,Cint,Ptr{cudnnPoolingMode_t},Ptr{cudnnNanPropagation_t},Ptr{Cint},Ptr{Cint},Ptr{Cint},Ptr{Cint}),poolingDesc,nbDimsRequested,mode,maxpoolingNanOpt,nbDims,windowDimA,paddingA,strideA))
+    end
+else
+    function cudnnSetPooling2dDescriptor(poolingDesc,mode,windowHeight,windowWidth,verticalPadding,horizontalPadding,verticalStride,horizontalStride)
+        cudnnCheck(ccall((:cudnnSetPooling2dDescriptor,libcudnn),cudnnStatus_t,(cudnnPoolingDescriptor_t,cudnnPoolingMode_t,Cint,Cint,Cint,Cint,Cint,Cint),poolingDesc,mode,windowHeight,windowWidth,verticalPadding,horizontalPadding,verticalStride,horizontalStride))
+    end
+    function cudnnGetPooling2dDescriptor(poolingDesc,mode,windowHeight,windowWidth,verticalPadding,horizontalPadding,verticalStride,horizontalStride)
+        cudnnCheck(ccall((:cudnnGetPooling2dDescriptor,libcudnn),cudnnStatus_t,(cudnnPoolingDescriptor_t,Ptr{cudnnPoolingMode_t},Ptr{Cint},Ptr{Cint},Ptr{Cint},Ptr{Cint},Ptr{Cint},Ptr{Cint}),poolingDesc,mode,windowHeight,windowWidth,verticalPadding,horizontalPadding,verticalStride,horizontalStride))
+    end
+    function cudnnSetPoolingNdDescriptor(poolingDesc,mode,nbDims,windowDimA,paddingA,strideA)
+        cudnnCheck(ccall((:cudnnSetPoolingNdDescriptor,libcudnn),cudnnStatus_t,(cudnnPoolingDescriptor_t,cudnnPoolingMode_t,Cint,Ptr{Cint},Ptr{Cint},Ptr{Cint}),poolingDesc,mode,nbDims,windowDimA,paddingA,strideA))
+    end
+    function cudnnGetPoolingNdDescriptor(poolingDesc,nbDimsRequested,mode,nbDims,windowDimA,paddingA,strideA)
+        cudnnCheck(ccall((:cudnnGetPoolingNdDescriptor,libcudnn),cudnnStatus_t,(cudnnPoolingDescriptor_t,Cint,Ptr{cudnnPoolingMode_t},Ptr{Cint},Ptr{Cint},Ptr{Cint},Ptr{Cint}),poolingDesc,nbDimsRequested,mode,nbDims,windowDimA,paddingA,strideA))
+    end
 end
 
 function cudnnGetPoolingNdForwardOutputDim(poolingDesc,inputTensorDesc,nbDims,outputTensorDimA)

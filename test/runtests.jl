@@ -86,7 +86,7 @@ tx = CudaArray(x)
 using CUDNN: cudnnTransformTensor
 y = ones(5,4,3,2)
 ty = CudaArray(y)
-@show to_host(cudnnTransformTensor(2, tx, 3, ty)) == 2x+3y
+@test to_host(cudnnTransformTensor(2, tx, 3, ty)) == 2x+3y
 
 
 using CUDNN: cudnnAddTensor
@@ -246,12 +246,10 @@ ty5 = CudaArray(zeros(5, 4, 1, 1))
 pd5 = PD(2, 3, 1, 1, CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING)
 @test cudnnGetPoolingNdForwardOutputDim(pd5, tx) == (5,4,1,1)
 @test squeeze(to_host(cudnnPoolingForward(tx, ty5; pd=pd5)),(3,4)) == [16/9 39/9 69/9 56/9; 3 7 12 87/9; 33/9 8 13 93/9; 39/9 9 14 11; 28/9 57/9 87/9 68/9]
-# This is buggy in the library:
 ty6 = CudaArray(zeros(5, 4, 1, 1))
 pd6 = PD(2, 3, 1, 1, CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING)
 @test cudnnGetPoolingNdForwardOutputDim(pd6, tx) == (5,4,1,1)
-# CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING is buggy:
-@show squeeze(to_host(cudnnPoolingForward(tx, ty6; pd=pd6)),(3,4)) == [16/4 39/6 69/6 56/4; 27/6 7 12 87/6; 33/6 8 13 93/6; 39/6 9 14 99/6; 28/4 57/6 87/6 68/4]
+@test squeeze(to_host(cudnnPoolingForward(tx, ty6; pd=pd6)),(3,4)) == [16/4 39/6 69/6 56/4; 27/6 7 12 87/6; 33/6 8 13 93/6; 39/6 9 14 99/6; 28/4 57/6 87/6 68/4]
 
 dy4 = reshape(Float64[1:20;], 5, 4, 1, 1); 
 tdy4 = CudaArray(dy4)
@@ -260,8 +258,7 @@ tdx4 = zeros(tx)
 tdx5 = zeros(tx)
 @test epseq(squeeze(to_host(cudnnPoolingBackward(ty5, tdy4, tx, tdx5; pd=pd5)),(3,4)), [16/9 39/9 69/9 56/9; 3 7 12 87/9; 33/9 8 13 93/9; 39/9 9 14 11; 28/9 57/9 87/9 68/9])
 tdx6 = zeros(tx)
-# CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING is buggy:
-@show epseq(squeeze(to_host(cudnnPoolingBackward(ty6, tdy4, tx, tdx6; pd=pd6)),(3,4)), [1/9 5/9 5/9 4/9;3/9 12/9 12/9 9/9;6/9 21/9 21/9 15/9;5/9 16/9 16/9 11/9;3/9 9/9 9/9 6/9])
+@test epseq(squeeze(to_host(cudnnPoolingBackward(ty6, tdy4, tx, tdx6; pd=pd6)),(3,4)), [2.361111111111111 5.527777777777778 11.777777777777779 10.0;  3.75 8.36111111111111 17.11111111111111 14.444444444444445;  4.166666666666666 8.5 16.0 13.333333333333332;  5.972222222222222 11.472222222222221 20.22222222222222 16.666666666666668; 4.583333333333334 8.63888888888889 14.88888888888889 12.222222222222221])
 
 # 3 size, 1 pad, 2 stride
 ty7 = CudaArray(zeros(3, 3, 1, 1))
@@ -273,11 +270,9 @@ ty8 = CudaArray(zeros(3, 3, 1, 1))
 pd8 = PD(2, 3, 1, 2, CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING)
 @test cudnnGetPoolingNdForwardOutputDim(pd8, tx) == (3,3,1,1)
 @test squeeze(to_host(cudnnPoolingForward(tx, ty8; pd=pd8)),(3,4)) == [16/9 69/9 33/6; 33/9 13 54/6; 28/9 87/9 39/6]
-# This is buggy in the library:
 ty9 = CudaArray(zeros(3, 3, 1, 1))
 pd9 = PD(2, 3, 1, 2, CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING)
-# CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING is buggy:
-@show squeeze(to_host(cudnnPoolingForward(tx, ty9; pd=pd9)),(3,4)) == [16/4 69/6 33/2; 33/6 13 54/3; 28/4 87/6 39/2]
+@test squeeze(to_host(cudnnPoolingForward(tx, ty9; pd=pd9)),(3,4)) == [16/4 69/6 33/2; 33/6 13 54/3; 28/4 87/6 39/2]
 
 dy7 = reshape(Float64[1:9;], 3, 3, 1, 1); 
 tdy7 = CudaArray(dy7)
@@ -288,16 +283,14 @@ tdx8 = zeros(tx)
 # TODO: check this answer
 @test epseq(squeeze(to_host(cudnnPoolingBackward(ty8, tdy7, tx, tdx8; pd=pd8)),(3,4)), [1/9 5/9 4/9 29/18; 1/3 4/3 1 7/2; 2/9 7/9 5/9 17/9; 5/9 16/9 11/9 73/18; 1/3 1 2/3 39/18])
 tdx9 = zeros(tx)
-# CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING is buggy:
-# TODO: find this answer
-@show squeeze(to_host(cudnnPoolingBackward(ty9, tdy7, tx, tdx9; pd=pd9)),(3,4)) == 0
+@test epseq(squeeze(to_host(cudnnPoolingBackward(ty9, tdy7, tx, tdx9; pd=pd9)),(3,4)), [0.25 0.9166666666666666 0.6666666666666666 4.166666666666667; 0.5833333333333333 1.8055555555555554 1.2222222222222223 7.388888888888889; 0.3333333333333333 0.8888888888888888 0.5555555555555556 3.2222222222222223; 1.0833333333333333 2.638888888888889 1.5555555555555556 8.722222222222221; 0.75 1.75 1.0 5.5])
 
 # 3D pooling support added in v3
 x10 = reshape(Float64[1:60;], 5, 4, 3, 1, 1); tx10 = CudaArray(x10)
 ty10 = CudaArray(zeros(3, 2, 1, 1, 1))
 pd10 = PD(3, 3, 0, 1, CUDNN_POOLING_MAX)
 # TODO: add 3d pooling tests
-@show cudnnPoolingForward(tx10, ty10; pd=pd10)
+# @show cudnnPoolingForward(tx10, ty10; pd=pd10)
 
 
 # Filters are basically the same as tensors:
@@ -412,9 +405,9 @@ tdx = similar(tdy)
 cudnnDivisiveNormalizationBackward(ty, tdy, tdx)
 dx = squeeze(to_host(tdx), (3,4))
 
-println(x)
-println(y)
-println(dy)
-println(dx)
+# println(x)
+# println(y)
+# println(dy)
+# println(dx)
 
 :ok
