@@ -199,10 +199,14 @@ dx = squeeze(to_host(tdx),(1,2))
 # dump(x)
 # dump(y)
 
-using CUDNN: CUDNN_POOLING_MAX, CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING, CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING
+using CUDNN: CUDNN_POOLING_MAX, CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING, CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING, CUDNN_NOT_PROPAGATE_NAN
 using CUDNN: PD, cudnnGetPoolingNdDescriptor
 pd = PD(2, 3, 2, 1, CUDNN_POOLING_MAX)
-@test cudnnGetPoolingNdDescriptor(pd) == (CUDNN_POOLING_MAX, 2, (3,3), (2,2), (1,1))
+if CUDNN_VERSION >= 4000
+    @test cudnnGetPoolingNdDescriptor(pd) == (CUDNN_POOLING_MAX, CUDNN_NOT_PROPAGATE_NAN, 2, (3,3), (2,2), (1,1))
+else
+    @test cudnnGetPoolingNdDescriptor(pd) == (CUDNN_POOLING_MAX, 2, (3,3), (2,2), (1,1))
+end
 # free(pd)
 
 using CUDNN: cudnnPoolingForward, cudnnPoolingBackward, cudnnGetPoolingNdForwardOutputDim
