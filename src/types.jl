@@ -1,13 +1,17 @@
-# The version is determined dynamically from the library
-# const CUDNN_MAJOR = 3
-# const CUDNN_MINOR = 0
-# const CUDNN_PATCHLEVEL = 2
-# const CUDNN_VERSION = CUDNN_MAJOR * 1000 + CUDNN_MINOR * 100 + CUDNN_PATCHLEVEL
+# Automatically generated using Clang.jl wrap_c, version 0.0.0
 
+using Compat
+
+# const CUDNN_MAJOR = 4
+# const CUDNN_MINOR = 0
+# const CUDNN_PATCHLEVEL = 4
+# const CUDNN_VERSION = CUDNN_MAJOR * 1000 + CUDNN_MINOR * 100 + CUDNN_PATCHLEVEL
+const CUDNN_DIM_MAX = 8
 const CUDNN_LRN_MIN_N = 1
 const CUDNN_LRN_MAX_N = 16
 const CUDNN_LRN_MIN_K = 1.0e-5
 const CUDNN_LRN_MIN_BETA = 0.01
+const CUDNN_BN_MIN_EPSILON = 1.0e-5
 
 type cudnnContext
 end
@@ -54,12 +58,23 @@ end
 
 typealias cudnnLRNDescriptor_t Ptr{cudnnLRNStruct}
 
+type cudnnActivationStruct
+end
+
+typealias cudnnActivationDescriptor_t Ptr{cudnnActivationStruct}
+
 # begin enum cudnnDataType_t
 typealias cudnnDataType_t UInt32
 const CUDNN_DATA_FLOAT = (UInt32)(0)
 const CUDNN_DATA_DOUBLE = (UInt32)(1)
 const CUDNN_DATA_HALF = (UInt32)(2)
 # end enum cudnnDataType_t
+
+# begin enum cudnnNanPropagation_t
+typealias cudnnNanPropagation_t UInt32
+const CUDNN_NOT_PROPAGATE_NAN = (UInt32)(0)
+const CUDNN_PROPAGATE_NAN = (UInt32)(1)
+# end enum cudnnNanPropagation_t
 
 # begin enum cudnnTensorFormat_t
 typealias cudnnTensorFormat_t UInt32
@@ -97,6 +112,7 @@ const CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM = (UInt32)(1)
 const CUDNN_CONVOLUTION_FWD_ALGO_GEMM = (UInt32)(2)
 const CUDNN_CONVOLUTION_FWD_ALGO_DIRECT = (UInt32)(3)
 const CUDNN_CONVOLUTION_FWD_ALGO_FFT = (UInt32)(4)
+const CUDNN_CONVOLUTION_FWD_ALGO_FFT_TILING = (UInt32)(5)
 # end enum cudnnConvolutionFwdAlgo_t
 
 type cudnnConvolutionFwdAlgoPerf_t
@@ -118,6 +134,7 @@ typealias cudnnConvolutionBwdFilterAlgo_t UInt32
 const CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0 = (UInt32)(0)
 const CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1 = (UInt32)(1)
 const CUDNN_CONVOLUTION_BWD_FILTER_ALGO_FFT = (UInt32)(2)
+const CUDNN_CONVOLUTION_BWD_FILTER_ALGO_3 = (UInt32)(3)
 # end enum cudnnConvolutionBwdFilterAlgo_t
 
 type cudnnConvolutionBwdFilterAlgoPerf_t
@@ -139,6 +156,7 @@ typealias cudnnConvolutionBwdDataAlgo_t UInt32
 const CUDNN_CONVOLUTION_BWD_DATA_ALGO_0 = (UInt32)(0)
 const CUDNN_CONVOLUTION_BWD_DATA_ALGO_1 = (UInt32)(1)
 const CUDNN_CONVOLUTION_BWD_DATA_ALGO_FFT = (UInt32)(2)
+const CUDNN_CONVOLUTION_BWD_DATA_ALGO_FFT_TILING = (UInt32)(3)
 # end enum cudnnConvolutionBwdDataAlgo_t
 
 type cudnnConvolutionBwdDataAlgoPerf_t
@@ -173,6 +191,7 @@ typealias cudnnActivationMode_t UInt32
 const CUDNN_ACTIVATION_SIGMOID = (UInt32)(0)
 const CUDNN_ACTIVATION_RELU = (UInt32)(1)
 const CUDNN_ACTIVATION_TANH = (UInt32)(2)
+const CUDNN_ACTIVATION_CLIPPED_RELU = (UInt32)(3)
 # end enum cudnnActivationMode_t
 
 # begin enum cudnnLRNMode_t
@@ -184,3 +203,9 @@ const CUDNN_LRN_CROSS_CHANNEL_DIM1 = (UInt32)(0)
 typealias cudnnDivNormMode_t UInt32
 const CUDNN_DIVNORM_PRECOMPUTED_MEANS = (UInt32)(0)
 # end enum cudnnDivNormMode_t
+
+# begin enum cudnnBatchNormMode_t
+typealias cudnnBatchNormMode_t UInt32
+const CUDNN_BATCHNORM_PER_ACTIVATION = (UInt32)(0)
+const CUDNN_BATCHNORM_SPATIAL = (UInt32)(1)
+# end enum cudnnBatchNormMode_t

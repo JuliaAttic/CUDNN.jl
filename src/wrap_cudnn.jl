@@ -1,5 +1,5 @@
 using Clang
-run(wrap_c.init(headers = ["/usr/usc/cuDNN/7.0.58/include/cudnn.h"],
+run(wrap_c.init(headers = ["/mnt/ai/home/dyuret/src/cudnn/4.0.4/include/cudnn.h"],
                 # index = None,
                 common_file="types.jl",
                 output_file="libcudnn.jl",
