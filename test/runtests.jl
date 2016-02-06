@@ -401,30 +401,32 @@ padding=map(x->x-1,size(w))
 @test epseq(squeeze(to_host(cudnnConvolutionForward(tx, tw; cd=CD(tx; padding=padding))),(3,4)), conv2(x,w))
 @test epseq(squeeze(to_host(conv2(tx, tw)), (3,4)), conv2(x,w))
 
-# LRN: TODO: add tests
-x = rand(5,4); tx = CudaArray(reshape(x, (5,4,1,1)))
-ty = similar(tx)
-cudnnLRNCrossChannelForward(tx,ty)
-y = squeeze(to_host(ty), (3,4))
-dy = rand(5,4); tdy = CudaArray(reshape(x, (5,4,1,1)))
-tdx = similar(tdy)
-cudnnLRNCrossChannelBackward(ty, tdy, tx, tdx)
-dx = squeeze(to_host(tdx), (3,4))
+if CUDNN_VERSION >= 3000
+    # LRN: TODO: add tests
+    x = rand(5,4); tx = CudaArray(reshape(x, (5,4,1,1)))
+    ty = similar(tx)
+    cudnnLRNCrossChannelForward(tx,ty)
+    y = squeeze(to_host(ty), (3,4))
+    dy = rand(5,4); tdy = CudaArray(reshape(x, (5,4,1,1)))
+    tdx = similar(tdy)
+    cudnnLRNCrossChannelBackward(ty, tdy, tx, tdx)
+    dx = squeeze(to_host(tdx), (3,4))
 
 
-# DivisiveNormalization
-x = rand(5,4); tx = CudaArray(reshape(x, (5,4,1,1)))
-ty = similar(tx)
-cudnnDivisiveNormalizationForward(tx,ty)
-y = squeeze(to_host(ty), (3,4))
-dy = rand(5,4); tdy = CudaArray(reshape(x, (5,4,1,1)))
-tdx = similar(tdy)
-cudnnDivisiveNormalizationBackward(ty, tdy, tdx)
-dx = squeeze(to_host(tdx), (3,4))
+    # DivisiveNormalization
+    x = rand(5,4); tx = CudaArray(reshape(x, (5,4,1,1)))
+    ty = similar(tx)
+    cudnnDivisiveNormalizationForward(tx,ty)
+    y = squeeze(to_host(ty), (3,4))
+    dy = rand(5,4); tdy = CudaArray(reshape(x, (5,4,1,1)))
+    tdx = similar(tdy)
+    cudnnDivisiveNormalizationBackward(ty, tdy, tdx)
+    dx = squeeze(to_host(tdx), (3,4))
 
-# println(x)
-# println(y)
-# println(dy)
-# println(dx)
+    # println(x)
+    # println(y)
+    # println(dy)
+    # println(dx)
+end # if CUDNN_VERSION >= 3000
 
 :ok

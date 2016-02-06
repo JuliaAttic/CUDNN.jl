@@ -1,17 +1,13 @@
-# TODO:
-# + v4 functions
-# + check new lrn and divisive
-# + test poolingoutputdim
-# - batchnorm
-
 ### High level interface to CUDNN:
 # 0. Init
 # 1. Descriptors
 # 2. Convolution
 # 3. Pooling
-# 4. LRN and DivisiveNormalization
-# 5. Other tensor functions
-# 6. Helper functions
+# 4. LRNCrossChannel
+# 5. DivisiveNormalization
+# 6. Batch Normalization
+# 7. Other tensor functions
+# 8. Helper functions
 
 
 ### 0. INIT ##################################################
@@ -531,10 +527,12 @@ end
 # v3 update: now it is in the library, but it is buggy, just gives the dimensions of src back.
 # v4 update: still buggy, I am amazed.
 function cudnnGetPoolingNdForwardOutputDim_buggy(pd::PD, src::AbstractCudaArray)
-    nbDims = ndims(src)
-    outputTensorDimA = Array(Cint, nbDims)
-    cudnnGetPoolingNdForwardOutputDim(pd.ptr, TD(src), nbDims, outputTensorDimA)
-    tuple(Int[reverse(outputTensorDimA)...]...)
+    if CUDNN_VERSION >= 3000
+        nbDims = ndims(src)
+        outputTensorDimA = Array(Cint, nbDims)
+        cudnnGetPoolingNdForwardOutputDim(pd.ptr, TD(src), nbDims, outputTensorDimA)
+        tuple(Int[reverse(outputTensorDimA)...]...)
+    end
 end
 
 # Here is the corrected version based on the specs
@@ -548,7 +546,7 @@ function cudnnGetPoolingNdForwardOutputDim(pd::PD, input::AbstractCudaArray)
 end
 
 
-### 4. LRN and DivisiveNormalization
+### 4. LRNCrossChannel
 
 function cudnnLRNCrossChannelForward(src, dest;
                                      handle=cudnnHandle,
@@ -575,6 +573,8 @@ function cudnnLRNCrossChannelBackward(src, srcDiff, dest, destDiff;
                                  cptr(beta,destDiff), TD(destDiff), destDiff)
     return destDiff
 end
+
+### 5. DIVISIVE NORMALIZATION ##################################################
 
 function cudnnDivisiveNormalizationForward(src, dest;
                                            means=nothing, temp1=nothing, temp2=nothing,
@@ -616,8 +616,25 @@ function cudnnDivisiveNormalizationBackward(src, srcDiff, destDiff;
     return destDiff
 end
 
+### 6. BATCH NORMALIZATION ##################################################
 
-### 5. OTHER TENSOR FUNCTIONS ##################################################
+# Modes:
+# CUDNN_BATCHNORM_PER_ACTIVATION: Normalization is performed per-activation. This mode is intended to be used after non- convolutional network layers. In this mode bnBias and bnScale tensor dimensions are 1xCxHxW.
+# CUDNN_BATCHNORM_SPATIAL: Normalization is performed over N+spatial dimensions. This mode is intended for use after convolutional layers (where spatial invariance is desired). In this mode bnBias, bnScale tensor dimensions are 1xCx1x1.
+
+# This function performs the forward BatchNormalization layer
+# computation for inference phase. This layer is based on the paper
+# "Batch Normalization: Accelerating Deep Network Training by Reducing
+# Internal Covariate Shift", S. Ioffe, C. Szegedy, 2015.  Only 4D and 5D
+# tensors are supported.  The epsilon value has to be the same during
+# training, backpropagation and inference.  For training phase use
+# cudnnBatchNormalizationForwardTraining.  Much higher performance when
+# HW-packed tensors are used for all of x, dy, dx.
+
+# TODO: read the paper and cudnn doc to figure out a good interface.
+
+
+### 7. OTHER TENSOR FUNCTIONS ##################################################
 
 # alpha * src + beta * dest -> dest
 # Both beta and dest optional, beta=0 if not specified, dest is allocated with ones if not specified.
@@ -639,7 +656,8 @@ function cudnnAddTensor(bias::AbstractCudaArray, src::AbstractCudaArray;
                         handle=cudnnHandle, alpha=1.0, beta=1.0, mode=CUDNN_ADD_SAME_C)
     CUDNN_VERSION >= 4000 ? cudnnAddTensor(handle, cptr(alpha,bias), TD(bias,4), bias, cptr(beta,src), TD(src,4), src) :
     CUDNN_VERSION >= 3000 ? cudnnAddTensor_v3(handle, cptr(alpha,bias), TD(bias,4), bias, cptr(beta,src), TD(src,4), src) :
-    cudnnAddTensor(handle, mode, cptr(alpha,bias), TD(bias,4), bias, cptr(beta,src), TD(src,4), src)
+    CUDNN_VERSION >= 2000 ? cudnnAddTensor(handle, mode, cptr(alpha,bias), TD(bias,4), bias, cptr(beta,src), TD(src,4), src) :
+    error("Unsupported version $CUDNN_VERSION")
     return src
 end
 
@@ -766,7 +784,7 @@ function cudnnSoftmaxBackward(src::AbstractCudaArray, srcDiff::AbstractCudaArray
 end
 
 
-### 6. HELPER FUNCTIONS ##################################################
+### 8. HELPER FUNCTIONS ##################################################
 
 # This is missing from CUDArt:
 Base.strides(a::AbstractCudaArray)=map(i->stride(a,i), tuple(1:ndims(a)...))
