@@ -46,7 +46,7 @@ end
 
 using CUDNN: cudnnGetVersion, cudnnGetErrorString, CUDNN_STATUS_SUCCESS
 @show cudnnGetVersion()
-@show bytestring(cudnnGetErrorString(CUDNN_STATUS_SUCCESS))
+@show cudnnGetErrorString(CUDNN_STATUS_SUCCESS)
 
 # TODO: handle type conflict between CUDArt and CUDNN when handling streams
 # using CUDNN: cudnnCreate, cudnnDestroy, cudnnHandle_t, cudnnSetStream, cudnnGetStream, cudaStream_t
@@ -367,9 +367,11 @@ using CUDNN: cudnnGetConvolutionForwardWorkspaceSize
 @test cudnnGetConvolutionForwardWorkspaceSize(src, flt, dst; algorithm=CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM) == 0
 @test cudnnGetConvolutionForwardWorkspaceSize(src, flt, dst; algorithm=CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM) == 4500 # size(flt,1)*size(flt,2)*size(flt,3)*sizeof(Cint)
 @test cudnnGetConvolutionForwardWorkspaceSize(src, flt, dst; algorithm=CUDNN_CONVOLUTION_FWD_ALGO_GEMM) == 1812432704 # this is from v4, v3:6107400000
-@test cudnnGetConvolutionForwardWorkspaceSize(src, flt, dst; algorithm=CUDNN_CONVOLUTION_FWD_ALGO_DIRECT) == 0
-@test cudnnGetConvolutionForwardWorkspaceSize(src, flt, dst; algorithm=CUDNN_CONVOLUTION_FWD_ALGO_FFT) == 0
-@test cudnnGetConvolutionForwardWorkspaceSize(src, flt, dst; algorithm=CUDNN_CONVOLUTION_FWD_ALGO_FFT_TILING) == 0
+
+# These get "CUDNN_STATUS_NOT_SUPPORTED" in v4:
+# @test cudnnGetConvolutionForwardWorkspaceSize(src, flt, dst; algorithm=CUDNN_CONVOLUTION_FWD_ALGO_DIRECT) == 0
+# @test cudnnGetConvolutionForwardWorkspaceSize(src, flt, dst; algorithm=CUDNN_CONVOLUTION_FWD_ALGO_FFT) == 0
+# @test cudnnGetConvolutionForwardWorkspaceSize(src, flt, dst; algorithm=CUDNN_CONVOLUTION_FWD_ALGO_FFT_TILING) == 0
 
 using CUDNN: cudnnConvolutionForward
 x = reshape(Float64[1:20;], 5, 4, 1, 1); tx = CudaArray(x)
