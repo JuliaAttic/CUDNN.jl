@@ -1,11 +1,14 @@
 using Base.Test
 using CUDArt
 using CUDNN
+
+include("test_libcudnn.jl")
+
 @show CUDNN_VERSION # this is set at runtime in CUDNN.jl, not fixed in types.jl
 
 # Uncomment this if you want lots of messages:
 # Base.Test.default_handler(r::Base.Test.Success) = info("$(r.expr)")
-Base.Test.default_handler(r::Base.Test.Failure) = info("FAIL: $(r.expr)")
+# Base.Test.default_handler(r::Base.Test.Failure) = info("FAIL: $(r.expr)")
 
 # See which operations support which dimensions:
 function testdims()
@@ -46,7 +49,7 @@ end
 
 using CUDNN: cudnnGetVersion, cudnnGetErrorString, CUDNN_STATUS_SUCCESS
 @show cudnnGetVersion()
-@show cudnnGetErrorString(CUDNN_STATUS_SUCCESS)
+@show bytestring(cudnnGetErrorString(CUDNN_STATUS_SUCCESS))
 
 # TODO: handle type conflict between CUDArt and CUDNN when handling streams
 # using CUDNN: cudnnCreate, cudnnDestroy, cudnnHandle_t, cudnnSetStream, cudnnGetStream, cudaStream_t

@@ -16,6 +16,7 @@ isdefined(Base, :__precompile__) && __precompile__()
 module CUDNN
 using Compat
 using CUDArt
+include("exports.jl")
 
 cudnnHandle = nothing
 
@@ -51,8 +52,9 @@ import Base: unsafe_convert, conv2, strides
 import CUDArt: free
 
 # This is missing from CUDArt:
-type cudaStream; end
-typealias cudaStream_t Ptr{cudaStream}
+# type cudaStream; end
+# typealias cudaStream_t Ptr{cudaStream}
+using CUDArt.rt.cudaStream_t
 
 # This is missing from cudnn.h:
 const CUDNN_DIM_MAX = 8
@@ -67,7 +69,7 @@ function cudnnCheck(status)
     warn("CUDNN error triggered from:")
     Base.show_backtrace(STDOUT, backtrace())
     println()
-    throw(cudnnGetErrorString(status))
+    throw(bytestring(cudnnGetErrorString(status)))
 end
 
 # These are semi-automatically generated using Clang with wrap_cudnn.jl:

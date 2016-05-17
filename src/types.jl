@@ -2,10 +2,10 @@
 
 using Compat
 
-# const CUDNN_MAJOR = 4
-# const CUDNN_MINOR = 0
-# const CUDNN_PATCHLEVEL = 4
-# const CUDNN_VERSION = CUDNN_MAJOR * 1000 + CUDNN_MINOR * 100 + CUDNN_PATCHLEVEL
+const CUDNN_MAJOR = 5
+const CUDNN_MINOR = 0
+const CUDNN_PATCHLEVEL = 5
+const CUDNN_VERSION = CUDNN_MAJOR * 1000 + CUDNN_MINOR * 100 + CUDNN_PATCHLEVEL
 const CUDNN_DIM_MAX = 8
 const CUDNN_LRN_MIN_N = 1
 const CUDNN_LRN_MAX_N = 16
@@ -13,9 +13,7 @@ const CUDNN_LRN_MIN_K = 1.0e-5
 const CUDNN_LRN_MIN_BETA = 0.01
 const CUDNN_BN_MIN_EPSILON = 1.0e-5
 
-type cudnnContext
-end
-
+typealias cudnnContext Void
 typealias cudnnHandle_t Ptr{cudnnContext}
 
 # begin enum cudnnStatus_t
@@ -33,35 +31,22 @@ const CUDNN_STATUS_NOT_SUPPORTED = (UInt32)(9)
 const CUDNN_STATUS_LICENSE_ERROR = (UInt32)(10)
 # end enum cudnnStatus_t
 
-type cudnnTensorStruct
-end
-
+typealias cudnnTensorStruct Void
 typealias cudnnTensorDescriptor_t Ptr{cudnnTensorStruct}
-
-type cudnnConvolutionStruct
-end
-
+typealias cudnnConvolutionStruct Void
 typealias cudnnConvolutionDescriptor_t Ptr{cudnnConvolutionStruct}
-
-type cudnnPoolingStruct
-end
-
+typealias cudnnPoolingStruct Void
 typealias cudnnPoolingDescriptor_t Ptr{cudnnPoolingStruct}
-
-type cudnnFilterStruct
-end
-
+typealias cudnnFilterStruct Void
 typealias cudnnFilterDescriptor_t Ptr{cudnnFilterStruct}
-
-type cudnnLRNStruct
-end
-
+typealias cudnnLRNStruct Void
 typealias cudnnLRNDescriptor_t Ptr{cudnnLRNStruct}
-
-type cudnnActivationStruct
-end
-
+typealias cudnnActivationStruct Void
 typealias cudnnActivationDescriptor_t Ptr{cudnnActivationStruct}
+typealias cudnnSpatialTransformerStruct Void
+typealias cudnnSpatialTransformerDescriptor_t Ptr{cudnnSpatialTransformerStruct}
+typealias cudnnOpTensorStruct Void
+typealias cudnnOpTensorDescriptor_t Ptr{cudnnOpTensorStruct}
 
 # begin enum cudnnDataType_t
 typealias cudnnDataType_t UInt32
@@ -82,15 +67,13 @@ const CUDNN_TENSOR_NCHW = (UInt32)(0)
 const CUDNN_TENSOR_NHWC = (UInt32)(1)
 # end enum cudnnTensorFormat_t
 
-# begin enum cudnnAddMode_t
-typealias cudnnAddMode_t UInt32
-const CUDNN_ADD_IMAGE = (UInt32)(0)
-const CUDNN_ADD_SAME_HW = (UInt32)(0)
-const CUDNN_ADD_FEATURE_MAP = (UInt32)(1)
-const CUDNN_ADD_SAME_CHW = (UInt32)(1)
-const CUDNN_ADD_SAME_C = (UInt32)(2)
-const CUDNN_ADD_FULL_TENSOR = (UInt32)(3)
-# end enum cudnnAddMode_t
+# begin enum cudnnOpTensorOp_t
+typealias cudnnOpTensorOp_t UInt32
+const CUDNN_OP_TENSOR_ADD = (UInt32)(0)
+const CUDNN_OP_TENSOR_MUL = (UInt32)(1)
+const CUDNN_OP_TENSOR_MIN = (UInt32)(2)
+const CUDNN_OP_TENSOR_MAX = (UInt32)(3)
+# end enum cudnnOpTensorOp_t
 
 # begin enum cudnnConvolutionMode_t
 typealias cudnnConvolutionMode_t UInt32
@@ -113,13 +96,14 @@ const CUDNN_CONVOLUTION_FWD_ALGO_GEMM = (UInt32)(2)
 const CUDNN_CONVOLUTION_FWD_ALGO_DIRECT = (UInt32)(3)
 const CUDNN_CONVOLUTION_FWD_ALGO_FFT = (UInt32)(4)
 const CUDNN_CONVOLUTION_FWD_ALGO_FFT_TILING = (UInt32)(5)
+const CUDNN_CONVOLUTION_FWD_ALGO_WINOGRAD = (UInt32)(6)
 # end enum cudnnConvolutionFwdAlgo_t
 
-type cudnnConvolutionFwdAlgoPerf_t
+immutable cudnnConvolutionFwdAlgoPerf_t
     algo::cudnnConvolutionFwdAlgo_t
     status::cudnnStatus_t
     time::Cfloat
-    memory::Cint
+    memory::Csize_t
 end
 
 # begin enum cudnnConvolutionBwdFilterPreference_t
@@ -137,11 +121,11 @@ const CUDNN_CONVOLUTION_BWD_FILTER_ALGO_FFT = (UInt32)(2)
 const CUDNN_CONVOLUTION_BWD_FILTER_ALGO_3 = (UInt32)(3)
 # end enum cudnnConvolutionBwdFilterAlgo_t
 
-type cudnnConvolutionBwdFilterAlgoPerf_t
+immutable cudnnConvolutionBwdFilterAlgoPerf_t
     algo::cudnnConvolutionBwdFilterAlgo_t
     status::cudnnStatus_t
     time::Cfloat
-    memory::Cint
+    memory::Csize_t
 end
 
 # begin enum cudnnConvolutionBwdDataPreference_t
@@ -157,13 +141,14 @@ const CUDNN_CONVOLUTION_BWD_DATA_ALGO_0 = (UInt32)(0)
 const CUDNN_CONVOLUTION_BWD_DATA_ALGO_1 = (UInt32)(1)
 const CUDNN_CONVOLUTION_BWD_DATA_ALGO_FFT = (UInt32)(2)
 const CUDNN_CONVOLUTION_BWD_DATA_ALGO_FFT_TILING = (UInt32)(3)
+const CUDNN_CONVOLUTION_BWD_DATA_ALGO_WINOGRAD = (UInt32)(4)
 # end enum cudnnConvolutionBwdDataAlgo_t
 
-type cudnnConvolutionBwdDataAlgoPerf_t
+immutable cudnnConvolutionBwdDataAlgoPerf_t
     algo::cudnnConvolutionBwdDataAlgo_t
     status::cudnnStatus_t
     time::Cfloat
-    memory::Cint
+    memory::Csize_t
 end
 
 # begin enum cudnnSoftmaxAlgorithm_t
@@ -209,3 +194,34 @@ typealias cudnnBatchNormMode_t UInt32
 const CUDNN_BATCHNORM_PER_ACTIVATION = (UInt32)(0)
 const CUDNN_BATCHNORM_SPATIAL = (UInt32)(1)
 # end enum cudnnBatchNormMode_t
+
+# begin enum cudnnSamplerType_t
+typealias cudnnSamplerType_t UInt32
+const CUDNN_SAMPLER_BILINEAR = (UInt32)(0)
+# end enum cudnnSamplerType_t
+
+typealias cudnnDropoutStruct Void
+typealias cudnnDropoutDescriptor_t Ptr{cudnnDropoutStruct}
+
+# begin enum cudnnRNNMode_t
+typealias cudnnRNNMode_t UInt32
+const CUDNN_RNN_RELU = (UInt32)(0)
+const CUDNN_RNN_TANH = (UInt32)(1)
+const CUDNN_LSTM = (UInt32)(2)
+const CUDNN_GRU = (UInt32)(3)
+# end enum cudnnRNNMode_t
+
+# begin enum cudnnDirectionMode_t
+typealias cudnnDirectionMode_t UInt32
+const CUDNN_UNIDIRECTIONAL = (UInt32)(0)
+const CUDNN_BIDIRECTIONAL = (UInt32)(1)
+# end enum cudnnDirectionMode_t
+
+# begin enum cudnnRNNInputMode_t
+typealias cudnnRNNInputMode_t UInt32
+const CUDNN_LINEAR_INPUT = (UInt32)(0)
+const CUDNN_SKIP_INPUT = (UInt32)(1)
+# end enum cudnnRNNInputMode_t
+
+typealias cudnnRNNStruct Void
+typealias cudnnRNNDescriptor_t Ptr{cudnnRNNStruct}
