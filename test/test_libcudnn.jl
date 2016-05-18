@@ -32,9 +32,21 @@ tensorDescPtr = cudnnTensorDescriptor_t[0]
 tensorDesc = tensorDescPtr[1]
 @test tensorDesc != cudnnTensorDescriptor_t(0)
 
-@show cudnnSetTensor4dDescriptor(tensorDesc,format,dataType,n,c,h,w) # 8/131
-@show cudnnSetTensor4dDescriptorEx(tensorDesc,dataType,n,c,h,w,nStride,cStride,hStride,wStride) # 9/131
-@show cudnnGetTensor4dDescriptor(tensorDesc,dataType,n,c,h,w,nStride,cStride,hStride,wStride) # 10/131
+format = CUDNN_TENSOR_NCHW
+dataType = CUDNN_DATA_FLOAT
+n,c,h,w = 2,3,4,5
+@test cudnnSetTensor4dDescriptor(tensorDesc,format,dataType,n,c,h,w) == nothing # 8/131
+
+nStride,cStride,hStride,wStride = 60,20,5,1
+@test cudnnSetTensor4dDescriptorEx(tensorDesc,dataType,n,c,h,w,nStride,cStride,hStride,wStride) == nothing # 9/131
+
+dataTypeP = cudnnDataType_t[0]
+nP,cP,hP,wP,nStrideP,cStrideP,hStrideP,wStrideP = [ Cint[0] for i in 1:8 ]
+@test cudnnGetTensor4dDescriptor(tensorDesc,dataTypeP,nP,cP,hP,wP,nStrideP,cStrideP,hStrideP,wStrideP) == nothing # 10/131
+for (x,a) in [ (n,nP), (c,cP), (h,hP), (w,wP), (nStride,nStrideP), (cStride,cStrideP), (hStride,hStrideP), (wStride,wStrideP)]
+    @test x == a[1]
+end
+
 @show cudnnSetTensorNdDescriptor(tensorDesc,dataType,nbDims,dimA,strideA) # 11/131
 @show cudnnGetTensorNdDescriptor(tensorDesc,nbDimsRequested,dataType,nbDims,dimA,strideA) # 12/131
 @show cudnnDestroyTensorDescriptor(tensorDesc) # 13/131
