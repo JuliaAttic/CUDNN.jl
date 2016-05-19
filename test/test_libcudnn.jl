@@ -32,12 +32,14 @@ tensorDescPtr = cudnnTensorDescriptor_t[0]
 tensorDesc = tensorDescPtr[1]
 @test tensorDesc != cudnnTensorDescriptor_t(0)
 
+rndsize(n) = ntuple(i->rand(1:6), n)
+rstride(s) = ntuple(i->prod(s[i+1:end]), length(s))
 format = CUDNN_TENSOR_NCHW
 dataType = CUDNN_DATA_FLOAT
-n,c,h,w = 2,3,4,5
+n,c,h,w = rndsize(4)
 @test cudnnSetTensor4dDescriptor(tensorDesc,format,dataType,n,c,h,w) == nothing # 8/131
 
-nStride,cStride,hStride,wStride = 60,20,5,1
+nStride,cStride,hStride,wStride = rstride((n,c,h,w))
 @test cudnnSetTensor4dDescriptorEx(tensorDesc,dataType,n,c,h,w,nStride,cStride,hStride,wStride) == nothing # 9/131
 
 dataTypeP = cudnnDataType_t[0]
@@ -47,16 +49,79 @@ for (x,a) in [ (n,nP), (c,cP), (h,hP), (w,wP), (nStride,nStrideP), (cStride,cStr
     @test x == a[1]
 end
 
-@show cudnnSetTensorNdDescriptor(tensorDesc,dataType,nbDims,dimA,strideA) # 11/131
-@show cudnnGetTensorNdDescriptor(tensorDesc,nbDimsRequested,dataType,nbDims,dimA,strideA) # 12/131
-@show cudnnDestroyTensorDescriptor(tensorDesc) # 13/131
-@show cudnnTransformTensor(handle,alpha,xDesc,x,beta,yDesc,y) # 14/131
-@show cudnnAddTensor(handle,alpha,aDesc,A,beta,cDesc,C) # 15/131
+for nbDims = 3:8
+    dimA = Cint[rndsize(nbDims)...]
+    strideA = Cint[rstride(dimA)...]
+    @test cudnnSetTensorNdDescriptor(tensorDesc,dataType,nbDims,dimA,strideA) == nothing # 11/131
+
+    nbDimsRequested = nbDims
+    nbDimsP = Cint[0]
+    dimP = zeros(Cint,nbDims)
+    strideP = zeros(Cint,nbDims)
+    @test cudnnGetTensorNdDescriptor(tensorDesc,nbDimsRequested,dataTypeP,nbDimsP,dimP,strideP) == nothing # 12/131
+    @test dataTypeP[1] == dataType
+    @test nbDimsP[1] == nbDims
+    @test dimP == dimA
+    @test strideP == strideA
+end
+
+@test cudnnDestroyTensorDescriptor(tensorDesc) == nothing # 13/131
+
+function tensorDescriptor{T}(x::CudaArray{T})
+    tensorDescPtr = cudnnTensorDescriptor_t[0]
+    cudnnCreateTensorDescriptor(tensorDescPtr)
+    tensorDesc = tensorDescPtr[1]
+    dataType = (T==Float64 ? CUDNN_DATA_DOUBLE :
+                T==Float32 ? CUDNN_DATA_FLOAT :
+                T==Float16 ? CUDNN_DATA_HALF :
+                error("CUDNN does not support $T"))
+    nbDims = Cint(ndims(x))
+    dimA = Cint[reverse(size(x))...]
+    strideA = Cint[reverse(strides(x))...]
+    cudnnSetTensorNdDescriptor(tensorDesc,dataType,nbDims,dimA,strideA)
+    tensorDesc
+end
+
+for n=3:8
+    xsize = rndsize(n)
+    alpha = rand(Float32, 1)
+    beta = rand(Float32, 1)
+    X = rand(Float32, xsize); x = CudaArray(X); xDesc = tensorDescriptor(x)
+    Y = rand(Float32, xsize); y = CudaArray(Y); yDesc = tensorDescriptor(y)
+    @test cudnnTransformTensor(handle,alpha,xDesc,x,beta,yDesc,y) == nothing # 14/131
+    @test isapprox(to_host(y), alpha[1]*X + beta[1]*Y)
+end
+
+# The documentation is misleading.  There are only 4 patterns cudnnAddTensor works for:
+# nchw, 1chw, 11hw, 1c11
+
+for n=4:5
+    for m=1:4 # 0:(2^n-1)
+        csize = rndsize(n)
+        C = rand(Float32, csize); c = CudaArray(C); cDesc = tensorDescriptor(c)
+        # asize = ntuple(i->((1<<(i-1))&m==0 ? csize[i] : 1), n)
+        asize = (m==1 ? ntuple(i->(i==n-1) ? csize[i] : 1, n) :
+                 m==2 ? ntuple(i->(i==n) ? 1 : csize[i], n) :
+                 m==3 ? ntuple(i->(i>=n-1) ? 1 : csize[i], n) :
+                 m==4 ? csize :
+                 error())
+        A = rand(Float32, asize); a = CudaArray(A); aDesc = tensorDescriptor(a)
+        # @show (csize,asize) # ,handle,alpha,aDesc,a,beta,cDesc,c)
+        try 
+            cudnnAddTensor(handle,alpha,aDesc,a,beta,cDesc,c) == nothing # 15/131
+        catch e
+            warn("$csize $asize failed.")
+        end
+        @test isapprox(to_host(c), alpha[1]*A .+ beta[1]*C)
+    end
+end
+
 @show cudnnCreateOpTensorDescriptor(opTensorDesc) # 16/131
 @show cudnnSetOpTensorDescriptor(opTensorDesc,opTensorOp,opTensorCompType,opTensorNanOpt) # 17/131
 @show cudnnGetOpTensorDescriptor(opTensorDesc,opTensorOp,opTensorCompType,opTensorNanOpt) # 18/131
 @show cudnnDestroyOpTensorDescriptor(opTensorDesc) # 19/131
 @show cudnnOpTensor(handle,opTensorDesc,alpha1,aDesc,A,alpha2,bDesc,B,beta,cDesc,C) # 20/131
+
 @show cudnnSetTensor(handle,yDesc,y,valuePtr) # 21/131
 @show cudnnScaleTensor(handle,yDesc,y,alpha) # 22/131
 @show cudnnCreateFilterDescriptor(filterDesc) # 23/131
@@ -168,4 +233,5 @@ end
 @show cudnnActivationForward_v4(handle,activationDesc,alpha,xDesc,x,beta,yDesc,y) # 129/131
 @show cudnnActivationBackward_v3(handle,mode,alpha,yDesc,y,dyDesc,dy,xDesc,x,beta,dxDesc,dx) # 130/131
 @show cudnnActivationBackward_v4(handle,activationDesc,alpha,yDesc,y,dyDesc,dy,xDesc,x,beta,dxDesc,dx) # 131/131
+
 @test cudnnDestroy(handle) == nothing # 4/131
