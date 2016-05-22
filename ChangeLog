@@ -1,3 +1,9 @@
+2016-05-22  Deniz Yuret  <dyuret@ku.edu.tr>
+
+	* test/test_libcudnn.jl: finish low level testing of v5 routines.
+	rethink high level interface.  implement and test.  provide cpu
+	versions of high level interface.
+
 2015-10-11  Deniz Yuret  <dyuret@ku.edu.tr>
 
 	* test/runtests.jl: TODO: test 3D conv/pooling in v3.
