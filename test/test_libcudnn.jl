@@ -1,5 +1,33 @@
 using CUDNN,Base.Test,CUDArt
 
+cudnnStatus_max = 10
+cudnnDataType_max = 2
+cudnnNanPropagation_max = 1
+cudnnTensorFormat_max = 1
+cudnnOpTensorOp_max = 3
+cudnnConvolutionMode_max = 1
+cudnnConvolutionFwdPreference_max = 2
+cudnnConvolutionFwdAlgo_max = 6
+cudnnConvolutionBwdFilterPreference_max = 2
+cudnnConvolutionBwdFilterAlgo_max = 3
+cudnnConvolutionBwdDataPreference_max = 2
+cudnnConvolutionBwdDataAlgo_max = 4
+cudnnSoftmaxAlgorithm_max = 2
+cudnnSoftmaxMode_max = 1
+cudnnPoolingMode_max = 2
+cudnnActivationMode_max = 3
+cudnnLRNMode_max = 0
+cudnnDivNormMode_max = 0
+cudnnBatchNormMode_max = 1
+cudnnSamplerType_max = 0
+cudnnRNNMode_max = 3
+cudnnDirectionMode_max = 1
+cudnnRNNInputMode_max = 1
+CUDNN_DIM_MIN = 3
+# CUDNN_DIM_MAX = 8
+CUDNN_ADD_MIN,CUDNN_ADD_MAX = 4,5
+CUDNN_OP_MIN,CUDNN_OP_MAX = 4,5
+
 v = Cint[0]
 CUDArt.rt.cudaDriverGetVersion(v); cudaDriverVersion=v[1]
 CUDArt.rt.cudaRuntimeGetVersion(v); cudaRuntimeVersion=v[1]
@@ -49,7 +77,7 @@ for (x,a) in [ (dataType,dataTypeP), (n,nP), (c,cP), (h,hP), (w,wP), (nStride,nS
     @test x == a[1]
 end
 
-for nbDims in 3:8
+for nbDims in CUDNN_DIM_MIN:CUDNN_DIM_MAX
     dimA = Cint[rndsize(nbDims)...]
     strideA = Cint[rstride(dimA)...]
     @test cudnnSetTensorNdDescriptor(tensorDesc,dataType,nbDims,dimA,strideA) == nothing # 11/131
@@ -84,7 +112,7 @@ end
 
 alpha = rand(Float32, 1)
 beta = rand(Float32, 1)
-for n=3:8
+for n=CUDNN_DIM_MIN:CUDNN_DIM_MAX
     xsize = rndsize(n)
     X = rand(Float32, xsize); x = CudaArray(X); xDesc = tensorDescriptor(x)
     Y = rand(Float32, xsize); y = CudaArray(Y); yDesc = tensorDescriptor(y)
@@ -92,10 +120,9 @@ for n=3:8
     @test isapprox(to_host(y), alpha[1]*X + beta[1]*Y)
 end
 
-# The cudnnAddTensor documentation is misleading.  There are only 4
-# patterns cudnnAddTensor works for: nchw, 1chw, 11hw, 1c11
+warn("The cudnnAddTensor documentation is misleading.  There are only 4 patterns cudnnAddTensor works for: nchw, 1chw, 11hw, 1c11")
 
-for n=4:5
+for n=CUDNN_ADD_MIN:CUDNN_ADD_MAX
     for m=1:4 # 0:(2^n-1)
         csize = rndsize(n)
         C = rand(Float32, csize); c = CudaArray(C); cDesc = tensorDescriptor(c)
@@ -141,7 +168,7 @@ for opTensorOp in (CUDNN_OP_TENSOR_ADD, CUDNN_OP_TENSOR_MUL, CUDNN_OP_TENSOR_MIN
             # size(A)==size(C), size(B,i)==size(C,i) or 1
             T = CUDNN.juliaDataType(opTensorCompType)
             alpha1, alpha2, beta = [ rand(T,1) for i=1:3 ]
-            for n in 4:5        # Only ndims 4:5 supported
+            for n in CUDNN_OP_MIN:CUDNN_OP_MAX        # Only ndims 4:5 supported
                 for m in 0:(2^n-1)
                     asize = csize = rndsize(n)
                     bsize = ntuple(i->((1<<(i-1))&m==0 ? 1 : csize[i]), n)
@@ -161,7 +188,7 @@ for opTensorOp in (CUDNN_OP_TENSOR_ADD, CUDNN_OP_TENSOR_MUL, CUDNN_OP_TENSOR_MIN
 end
 @test cudnnDestroyOpTensorDescriptor(opTensorDesc) == nothing # 19/131
 
-for n=4:5
+for n=CUDNN_OP_MIN:CUDNN_OP_MAX
     y = CudaArray(Float32, rndsize(n)); yDesc = tensorDescriptor(y)
     valuePtr = Float32[42]
     @test cudnnSetTensor(handle,yDesc,y,valuePtr) == nothing # 21/131
@@ -188,7 +215,7 @@ for (x,a) in [ (dataType,dataTypeP), (format,formatP), (k,kP), (c,cP), (h,hP), (
     @test x == a[1]
 end
 
-for nbDims in 3:8
+for nbDims in CUDNN_DIM_MIN:CUDNN_DIM_MAX
     dimA = Cint[rndsize(nbDims)...]
     @test cudnnSetFilterNdDescriptor(filterDesc,dataType,format,nbDims,dimA) == nothing # 26/131
 
@@ -254,7 +281,7 @@ f = CudaArray(Float32,fsize); fDesc = filterDescriptor(f)
 
 using CUDNN: juliaDataType
 
-for arrayLength = 1:6
+for arrayLength = 1:(CUDNN_DIM_MAX-2)
     padA = Cint[rndsize(arrayLength)...]
     strideA = Cint[rndsize(arrayLength)...]
     upscaleA = ones(Cint, arrayLength)
@@ -268,53 +295,159 @@ for arrayLength = 1:6
     for (a,p) in [ (padA,padP), (strideA,strideP), (upscaleA,upscaleP) ]; @test a==p; end
     for (x,p) in [ (arrayLength,arrayLengthP), (mode,modeP), (dataType,dataTypeP) ]; @test x==p[1]; end
 
-    tsize = rndsize(arrayLength+2)
-    fsize = ntuple(arrayLength+2) do i
+    xsize = rndsize(arrayLength+2)
+    wsize = ntuple(arrayLength+2) do i
         (i == 1 ? rand(1:5) :
-         i == 2 ? tsize[i] :
-         rand(1:tsize[i]+2*padA[i-2]))
+         i == 2 ? xsize[i] :
+         rand(1:xsize[i]+2*padA[i-2]))
     end
-    tDesc = tensorDescriptor(CudaArray(juliaDataType(dataType),reverse(tsize)))
-    fDesc = filterDescriptor(CudaArray(juliaDataType(dataType),reverse(fsize)))
+    x = CudaArray(juliaDataType(dataType),reverse(xsize))
+    w = CudaArray(juliaDataType(dataType),reverse(wsize))
+    xDesc = tensorDescriptor(x)
+    wDesc = filterDescriptor(w)
     nbDims = arrayLength+2
     dimA = Array(Cint,nbDims)
-    # @show tsize, fsize, padA, strideA
-    @test cudnnGetConvolutionNdForwardOutputDim(convDesc,tDesc,fDesc,nbDims,dimA) == nothing # 37/131
+    # @show xsize, wsize, padA, strideA
+
+    @test cudnnGetConvolutionNdForwardOutputDim(convDesc,xDesc,wDesc,nbDims,dimA) == nothing # 37/131
+    # 38/131 is after the for loop
     # @show dimA
-    @test dimA[1] == tsize[1]
-    @test dimA[2] == fsize[1]
-    for i=1:arrayLength; @test dimA[i+2]==1+div(tsize[i+2]+2*padA[i]-fsize[i+2],strideA[i]); end
+    @test dimA[1] == xsize[1]
+    @test dimA[2] == wsize[1]
+    for i=1:arrayLength; @test dimA[i+2]==1+div(xsize[i+2]+2*padA[i]-wsize[i+2],strideA[i]); end
+
+    ysize = dimA
+    y = CudaArray(juliaDataType(dataType),reverse(ysize))
+    yDesc = tensorDescriptor(y)
+    requestedAlgoCount = 1 + cudnnConvolutionFwdAlgo_max
+    returnedAlgoCount = Cint[0]
+    perfResults = Array(cudnnConvolutionFwdAlgoPerf_t, requestedAlgoCount)
+    @test cudnnFindConvolutionForwardAlgorithm(handle,xDesc,wDesc,convDesc,yDesc,requestedAlgoCount,returnedAlgoCount,perfResults) == nothing # 39/131
+    for i=1:returnedAlgoCount[1]
+        println((:cudnnFindConvolutionForwardAlgorithm, i, perfResults[i]))
+    end
+    
+    workSpaceSizeInBytes = 1000000
+    workSpace = CudaArray(Cuchar, workSpaceSizeInBytes)
+    @test cudnnFindConvolutionForwardAlgorithmEx(handle,xDesc,x,wDesc,w,convDesc,yDesc,y,requestedAlgoCount,returnedAlgoCount,perfResults,workSpace,workSpaceSizeInBytes) == nothing # 40/131
+    for i=1:returnedAlgoCount[1]
+        println((:cudnnFindConvolutionForwardAlgorithmEx, i, perfResults[i]))
+    end
+
+    for i=0:cudnnConvolutionFwdPreference_max
+        preference = cudnnConvolutionFwdPreference_t(i)
+        memoryLimitInBytes = Csize_t(10^10)
+        algoP = cudnnConvolutionFwdAlgo_t[0]
+        @test cudnnGetConvolutionForwardAlgorithm(handle,xDesc,wDesc,convDesc,yDesc,preference,memoryLimitInBytes,algoP) == nothing # 41/131
+        println((:cudnnGetConvolutionForwardAlgorithm, preference, algoP[1]))
+    end
+    for i=0:cudnnConvolutionFwdAlgo_max
+        algo = cudnnConvolutionFwdAlgo_t(i)
+        sizeInBytes = Csize_t[0]
+        @test cudnnGetConvolutionForwardWorkspaceSize(handle,xDesc,wDesc,convDesc,yDesc,algo,sizeInBytes) == nothing # 42/131
+        println((:cudnnGetConvolutionForwardWorkspaceSize, algo, sizeInBytes[1]))
+        workSpaceSizeInBytes = sizeInBytes[1]
+        workSpace = CudaArray(UInt8, workSpaceSizeInBytes)
+        @test cudnnConvolutionForward(handle,alpha,xDesc,x,wDesc,w,convDesc,algo,workSpace,workSpaceSizeInBytes,beta,yDesc,y) == nothing # 43/131
+    end
+
+    # cudnnConvolutionBackwardBias has nothing to do with convolution, it is just broadcast addition.
+    # The Julia size of the bias array should be (1,1,...,C,1)
+    dy = randn!(similar(y))
+    dyDesc = tensorDescriptor(dy)
+    bsize = ntuple(i->(i==2 ? ysize[i] : 1), length(ysize))
+    db = similar(y, reverse(bsize))
+    dbDesc = tensorDescriptor(db)
+    @test cudnnConvolutionBackwardBias(handle,alpha,dyDesc,dy,beta,dbDesc,db) == nothing # 44/131
+
+    dw = similar(w)
+    dwDesc = tensorDescriptor(dw)
+    requestedAlgoCount = Cint(1 + cudnnConvolutionBwdFilterAlgo_max)
+    perfResults = Array(cudnnConvolutionBwdFilterAlgoPerf_t, requestedAlgoCount)
+    @test cudnnFindConvolutionBackwardFilterAlgorithm(handle,xDesc,dyDesc,convDesc,dwDesc,requestedAlgoCount,returnedAlgoCount,perfResults) == nothing # 45/131
+    for i=1:returnedAlgoCount[1]
+        println((:cudnnFindConvolutionBackwardFilterAlgorithm, i, perfResults[i]))
+    end
+
+    workSpaceSizeInBytes = 1000000
+    workSpace = CudaArray(Cuchar, workSpaceSizeInBytes)
+    @test cudnnFindConvolutionBackwardFilterAlgorithmEx(handle,xDesc,x,dyDesc,y,convDesc,dwDesc,dw,requestedAlgoCount,returnedAlgoCount,perfResults,workSpace,workSpaceSizeInBytes) == nothing # 46/131
+    for i=1:returnedAlgoCount[1]
+        println((:cudnnFindConvolutionBackwardFilterAlgorithmEx, i, perfResults[i]))
+    end
+
+    for i=0:cudnnConvolutionBwdFilterPreference_max
+        preference = cudnnConvolutionBwdFilterPreference_t(i)
+        memoryLimitInBytes = Csize_t(10^10)
+        algoP = cudnnConvolutionBwdFilterAlgo_t[0]
+        @test cudnnGetConvolutionBackwardFilterAlgorithm(handle,xDesc,dyDesc,convDesc,dwDesc,preference,memoryLimitInBytes,algoP) == nothing # 47/131
+        println((:cudnnGetConvolutionBackwardFilterAlgorithm, preference, algoP[1]))
+    end
+
+    for i=0:cudnnConvolutionBwdFilterAlgo_max
+        algo = cudnnConvolutionBwdFilterAlgo_t(i)
+        sizeInBytes = Csize_t[0]
+        @test cudnnGetConvolutionBackwardFilterWorkspaceSize(handle,xDesc,dyDesc,convDesc,dwDesc,algo,sizeInBytes) == nothing # 48/131
+        println((:cudnnGetConvolutionBackwardFilterWorkspaceSize, algo, sizeInBytes[1]))
+        workSpaceSizeInBytes = sizeInBytes[1]
+        workSpace = CudaArray(UInt8, workSpaceSizeInBytes)
+        @test cudnnConvolutionBackwardFilter(handle,alpha,xDesc,x,dyDesc,dy,convDesc,algo,workSpace,workSpaceSizeInBytes,beta,dwDesc,dw) == nothing # 49/131
+    end
+
+    dx = similar(x)
+    dxDesc = tensorDescriptor(dx)
+    requestedAlgoCount = Cint(1 + cudnnConvolutionBwdDataAlgo_max)
+    perfResults = Array(cudnnConvolutionBwdDataAlgoPerf_t, requestedAlgoCount)
+    @test cudnnFindConvolutionBackwardDataAlgorithm(handle,wDesc,dyDesc,convDesc,dxDesc,requestedAlgoCount,returnedAlgoCount,perfResults) == nothing # 50/131
+    for i=1:returnedAlgoCount[1]
+        println((:cudnnFindConvolutionBackwardDataAlgorithm, i, perfResults[i]))
+    end
+
+    workSpaceSizeInBytes = 1000000
+    workSpace = CudaArray(Cuchar, workSpaceSizeInBytes)
+    @test cudnnFindConvolutionBackwardDataAlgorithmEx(handle,wDesc,w,dyDesc,dy,convDesc,dxDesc,dx,requestedAlgoCount,returnedAlgoCount,perfResults,workSpace,workSpaceSizeInBytes) == nothing # 51/131
+    for i=1:returnedAlgoCount[1]
+        println((:cudnnFindConvolutionBackwardDataAlgorithmEx, i, perfResults[i]))
+    end
+
+    for i=0:cudnnConvolutionBwdDataPreference_max
+        preference = cudnnConvolutionBwdDataPreference_t(i)
+        memoryLimitInBytes = Csize_t(10^10)
+        algoP = cudnnConvolutionBwdDataAlgo_t[0]
+        @test cudnnGetConvolutionBackwardDataAlgorithm(handle,wDesc,dyDesc,convDesc,dxDesc,preference,memoryLimitInBytes,algoP) == nothing # 52/131
+        println((:cudnnGetConvolutionBackwardDataAlgorithm, preference, algoP[1]))
+    end
+
+    for i=0:cudnnConvolutionBwdDataAlgo_max
+        algo = cudnnConvolutionBwdDataAlgo_t(i)
+        sizeInBytes = Csize_t[0]
+        @test cudnnGetConvolutionBackwardDataWorkspaceSize(handle,wDesc,dyDesc,convDesc,dxDesc,algo,sizeInBytes) == nothing # 53/131
+        println((:cudnnGetConvolutionBackwardDataWorkspaceSize, algo, sizeInBytes[1]))
+        workSpaceSizeInBytes = sizeInBytes[1]
+        workSpace = CudaArray(UInt8, workSpaceSizeInBytes)
+        @test cudnnConvolutionBackwardData(handle,alpha,wDesc,w,dyDesc,dy,convDesc,algo,workSpace,workSpaceSizeInBytes,beta,dxDesc,dx) == nothing # 54/131
+    end
+
+    warn("cudnnIm2Col is not in the v4,v5 documentation?")
+    colBuffer = CudaArray(CuChar, sizeof(x))
+    @test cudnnIm2Col(handle,xDesc,x,wDesc,convDesc,colBuffer) == nothing # 55/131
 end
 
 @test cudnnDestroyConvolutionDescriptor(convDesc) == nothing # 38/131
 
+for i=CUDNN_DIM_MIN:CUDNN_DIM_MAX
+    xsize = rndsize(i)
+    x,y,dy,dx = [ CudaArray(juliaDataType(dataType),reverse(xsize)) for j=1:4 ]
+    xDesc = yDesc = dyDesc = dxDesc = tensorDescriptor(x)
+    for algo=0:cudnnSoftmaxAlgorithm_max
+        for mode=0:cudnnSoftmaxMode_max
+            @test cudnnSoftmaxForward(handle,algo,mode,alpha,xDesc,x,beta,yDesc,y) == nothing # 56/131
+            @test cudnnSoftmaxBackward(handle,algo,mode,alpha,yDesc,y,dyDesc,dy,beta,dxDesc,dx) == nothing # 57/131
+        end
+    end
+end
+
 error(:ok)
-
-@show cudnnFindConvolutionForwardAlgorithm(handle,xDesc,wDesc,convDesc,yDesc,requestedAlgoCount,returnedAlgoCount,perfResults) # 39/131
-@show cudnnFindConvolutionForwardAlgorithmEx(handle,xDesc,x,wDesc,w,convDesc,yDesc,y,requestedAlgoCount,returnedAlgoCount,perfResults,workSpace,workSpaceSizeInBytes) # 40/131
-@show cudnnGetConvolutionForwardAlgorithm(handle,xDesc,wDesc,convDesc,yDesc,preference,memoryLimitInBytes,algo) # 41/131
-@show cudnnGetConvolutionForwardWorkspaceSize(handle,xDesc,wDesc,convDesc,yDesc,algo,sizeInBytes) # 42/131
-
-@show cudnnConvolutionForward(handle,alpha,xDesc,x,wDesc,w,convDesc,algo,workSpace,workSpaceSizeInBytes,beta,yDesc,y) # 43/131
-
-@show cudnnConvolutionBackwardBias(handle,alpha,dyDesc,dy,beta,dbDesc,db) # 44/131
-
-@show cudnnFindConvolutionBackwardFilterAlgorithm(handle,xDesc,dyDesc,convDesc,dwDesc,requestedAlgoCount,returnedAlgoCount,perfResults) # 45/131
-@show cudnnFindConvolutionBackwardFilterAlgorithmEx(handle,xDesc,x,dyDesc,y,convDesc,dwDesc,dw,requestedAlgoCount,returnedAlgoCount,perfResults,workSpace,workSpaceSizeInBytes) # 46/131
-@show cudnnGetConvolutionBackwardFilterAlgorithm(handle,xDesc,dyDesc,convDesc,dwDesc,preference,memoryLimitInBytes,algo) # 47/131
-@show cudnnGetConvolutionBackwardFilterWorkspaceSize(handle,xDesc,dyDesc,convDesc,gradDesc,algo,sizeInBytes) # 48/131
-@show cudnnConvolutionBackwardFilter(handle,alpha,xDesc,x,dyDesc,dy,convDesc,algo,workSpace,workSpaceSizeInBytes,beta,dwDesc,dw) # 49/131
-
-@show cudnnFindConvolutionBackwardDataAlgorithm(handle,wDesc,dyDesc,convDesc,dxDesc,requestedAlgoCount,returnedAlgoCount,perfResults) # 50/131
-@show cudnnFindConvolutionBackwardDataAlgorithmEx(handle,wDesc,w,dyDesc,dy,convDesc,dxDesc,dx,requestedAlgoCount,returnedAlgoCount,perfResults,workSpace,workSpaceSizeInBytes) # 51/131
-@show cudnnGetConvolutionBackwardDataAlgorithm(handle,wDesc,dyDesc,convDesc,dxDesc,preference,memoryLimitInBytes,algo) # 52/131
-@show cudnnGetConvolutionBackwardDataWorkspaceSize(handle,wDesc,dyDesc,convDesc,dxDesc,algo,sizeInBytes) # 53/131
-@show cudnnConvolutionBackwardData(handle,alpha,wDesc,w,dyDesc,dy,convDesc,algo,workSpace,workSpaceSizeInBytes,beta,dxDesc,dx) # 54/131
-
-@show cudnnIm2Col(handle,xDesc,x,wDesc,convDesc,colBuffer) # 55/131
-
-@show cudnnSoftmaxForward(handle,algo,mode,alpha,xDesc,x,beta,yDesc,y) # 56/131
-@show cudnnSoftmaxBackward(handle,algo,mode,alpha,yDesc,y,dyDesc,dy,beta,dxDesc,dx) # 57/131
 
 @show cudnnCreatePoolingDescriptor(poolingDesc) # 58/131
 @show cudnnSetPooling2dDescriptor(poolingDesc,mode,maxpoolingNanOpt,windowHeight,windowWidth,verticalPadding,horizontalPadding,verticalStride,horizontalStride) # 59/131
