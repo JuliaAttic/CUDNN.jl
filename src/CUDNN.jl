@@ -15,7 +15,7 @@
 isdefined(Base, :__precompile__) && __precompile__()
 module CUDNN
 using Compat
-using CUDArt
+using CUDAdrv
 
 cudnnHandle = nothing
 
@@ -48,7 +48,6 @@ export cudnnGetConvolutionNdForwardOutputDim, cudnnGetPoolingNdForwardOutputDim,
 export cudnnLRNCrossChannelForward, cudnnLRNCrossChannelBackward, cudnnDivisiveNormalizationForward, cudnnDivisiveNormalizationBackward
 
 import Base: unsafe_convert, conv2, strides
-import CUDArt: free
 
 # This is missing from CUDArt:
 type cudaStream; end
@@ -75,9 +74,9 @@ include("types.jl")
 include("libcudnn.jl")
 
 # Conversion between Julia and CUDNN datatypes
-cudnnDataType(::AbstractCudaArray{Float16})=CUDNN_DATA_HALF
-cudnnDataType(::AbstractCudaArray{Float32})=CUDNN_DATA_FLOAT
-cudnnDataType(::AbstractCudaArray{Float64})=CUDNN_DATA_DOUBLE
+cudnnDataType(::CuArray{Float16})=CUDNN_DATA_HALF
+cudnnDataType(::CuArray{Float32})=CUDNN_DATA_FLOAT
+cudnnDataType(::CuArray{Float64})=CUDNN_DATA_DOUBLE
 cudnnDataType(::Type{Float16})=CUDNN_DATA_HALF
 cudnnDataType(::Type{Float32})=CUDNN_DATA_FLOAT
 cudnnDataType(::Type{Float64})=CUDNN_DATA_DOUBLE
@@ -109,7 +108,7 @@ unsafe_convert(::Type{cudnnPoolingDescriptor_t}, pd::PD)=pd.ptr
 unsafe_convert(::Type{cudnnLRNDescriptor_t}, ld::LD)=ld.ptr
 unsafe_convert(::Type{cudnnActivationDescriptor_t}, ad::AD)=ad.ptr
 
-function TD(a::AbstractCudaArray, dims=ndims(a))
+function TD(a::CuArray, dims=ndims(a))
     (sz, st) = tensorsize(a, dims)
     d = cudnnTensorDescriptor_t[0]
     cudnnCreateTensorDescriptor(d)
@@ -119,7 +118,7 @@ function TD(a::AbstractCudaArray, dims=ndims(a))
     return this
 end
 
-function FD(a::AbstractCudaArray, dims=ndims(a), format=CUDNN_TENSOR_NCHW)
+function FD(a::CuArray, dims=ndims(a), format=CUDNN_TENSOR_NCHW)
     # The only difference of a FilterDescriptor is no strides.
     (sz, st) = tensorsize(a, dims)
     d = cudnnFilterDescriptor_t[0]
@@ -144,21 +143,21 @@ function CD(nd, padding, stride, upscale, mode, xtype)
 end
 
 CD(; ndims=2, padding=0, stride=1, upscale=1, mode=CUDNN_CONVOLUTION, eltype=Float32)=CD(ndims, padding, stride, upscale, mode, eltype)
-CD(a::AbstractCudaArray; o...)=CD(; o..., ndims=ndims(a)-2, eltype=eltype(a))
+CD(a::CuArray; o...)=CD(; o..., ndims=ndims(a)-2, eltype=eltype(a))
 
 function PD(nd, window, padding, stride, mode, maxpoolingNanOpt=CUDNN_NOT_PROPAGATE_NAN)
     pd = cudnnPoolingDescriptor_t[0]
     cudnnCreatePoolingDescriptor(pd)
     CUDNN_VERSION >= 4000 ?
     cudnnSetPoolingNdDescriptor_v4(pd[1],mode,maxpoolingNanOpt,nd,pdsize(window,nd),pdsize(padding,nd),pdsize(stride,nd)) :
-    cudnnSetPoolingNdDescriptor(pd[1],mode,nd,pdsize(window,nd),pdsize(padding,nd),pdsize(stride,nd))    
+    cudnnSetPoolingNdDescriptor(pd[1],mode,nd,pdsize(window,nd),pdsize(padding,nd),pdsize(stride,nd))
     this = PD(pd[1])
     finalizer(this, free)
     return this
 end
 
 PD(; ndims=2, window=2, padding=0, stride=window, mode=CUDNN_POOLING_MAX, maxpoolingNanOpt=CUDNN_NOT_PROPAGATE_NAN)=PD(ndims,window,padding,stride,mode,maxpoolingNanOpt)
-PD(a::AbstractCudaArray; o...)=PD(; o..., ndims=ndims(a)-2)
+PD(a::CuArray; o...)=PD(; o..., ndims=ndims(a)-2)
 
 function LD(lrnN, lrnAlpha, lrnBeta, lrnK)
     ld = cudnnLRNDescriptor_t[0]
@@ -298,7 +297,7 @@ end
 # followed:
 #  outputDim = 1 + (inputDim + 2*pad - filterDim)/convolutionStride;
 
-function cudnnGetConvolutionNdForwardOutputDim(src::AbstractCudaArray, filter::AbstractCudaArray; cd=nothing, o...)
+function cudnnGetConvolutionNdForwardOutputDim(src::CuArray, filter::CuArray; cd=nothing, o...)
     cd1 = (cd == nothing ? CD(src; o...) : cd)
     nbDims = ndims(src)
     outputDim = Array(Cint, nbDims)
@@ -316,34 +315,34 @@ end
 # 3D is only available for IMPLICIT_GEMM and the speed difference does not
 # seem significant, so I switched the default to IMPLICIT_GEMM.
 #
-# Forward convolution is now implemented via several different algorithms, and 
-# the interface allows the application to choose one of these algorithms specifically 
-# or to specify a strategy (e.g., prefer fastest, use no additional working space) by 
-# which the library should select the best algorithm automatically. The four 
+# Forward convolution is now implemented via several different algorithms, and
+# the interface allows the application to choose one of these algorithms specifically
+# or to specify a strategy (e.g., prefer fastest, use no additional working space) by
+# which the library should select the best algorithm automatically. The four
 # algorithms currently given are as follows:
-# o IMPLICIT_GEMM corresponds to the sole algorithm that was provided in 
-# cuDNN Release 1; it is the only algorithm that supports all input sizes while 
+# o IMPLICIT_GEMM corresponds to the sole algorithm that was provided in
+# cuDNN Release 1; it is the only algorithm that supports all input sizes while
 # using no additional working space.
-# o IMPLICIT_PRECOMP_GEMM is a modification of this approach that uses a 
-# small amount of working space (specifically, C*R*S*sizeof(int) bytes, 
-# where C is the number of input feature maps and R and S are the filter height 
-# and width, respectively, for the case of 2D convolutions) to achieve 
-# significantly higher performance in most cases. This algorithm achieves its 
+# o IMPLICIT_PRECOMP_GEMM is a modification of this approach that uses a
+# small amount of working space (specifically, C*R*S*sizeof(int) bytes,
+# where C is the number of input feature maps and R and S are the filter height
+# and width, respectively, for the case of 2D convolutions) to achieve
+# significantly higher performance in most cases. This algorithm achieves its
 # highest performance when zero-padding is not used.
-# o GEMM is an “im2col”-based approach, explicitly expanding the input data 
-# in memory and then using an otherwise-pure matrix multiplication that 
-# obeys cuDNN’s input and output stridings, avoiding a separate transposition 
+# o GEMM is an “im2col”-based approach, explicitly expanding the input data
+# in memory and then using an otherwise-pure matrix multiplication that
+# obeys cuDNN’s input and output stridings, avoiding a separate transposition
 # step on the input or output. Note that this algorithm requires significant
-# working space, though it may be faster than either of the two “implicit 
+# working space, though it may be faster than either of the two “implicit
 # GEMM” approaches in some cases. As such, the PREFER_FASTEST
-# forward convolution algorithm preference may sometimes recommend this 
-# approach. When memory should be used more sparingly, 
+# forward convolution algorithm preference may sometimes recommend this
+# approach. When memory should be used more sparingly,
 # SPECIFY_WORKSPACE_LIMIT can be used instead of PREFER_FASTEST
-# to ensure that the algorithm recommended will not require more than a given 
+# to ensure that the algorithm recommended will not require more than a given
 # amount of working space.
 # o DIRECT is a placeholder for a future implementation of direct convolution.
 
-function cudnnGetConvolutionForwardAlgorithm(src::AbstractCudaArray, filter::AbstractCudaArray, dest::AbstractCudaArray; 
+function cudnnGetConvolutionForwardAlgorithm(src::CuArray, filter::CuArray, dest::CuArray;
                                              handle=cudnnHandle,
                                              preference=CUDNN_CONVOLUTION_FWD_PREFER_FASTEST, memoryLimitInbytes=10^9,
                                              cd=nothing, o...)
@@ -354,7 +353,7 @@ function cudnnGetConvolutionForwardAlgorithm(src::AbstractCudaArray, filter::Abs
     return algo[1]
 end
 
-function cudnnGetConvolutionForwardWorkspaceSize(src::AbstractCudaArray, filter::AbstractCudaArray, dest::AbstractCudaArray;
+function cudnnGetConvolutionForwardWorkspaceSize(src::CuArray, filter::CuArray, dest::CuArray;
                                                  handle=cudnnHandle, algorithm=CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM,
                                                  cd=nothing, o...)
     cd1 = (cd == nothing ? CD(src; o...) : cd)
@@ -365,7 +364,7 @@ function cudnnGetConvolutionForwardWorkspaceSize(src::AbstractCudaArray, filter:
 end
 
 function cudnnConvolutionForward(src, filter, dest=nothing;
-                                 handle=cudnnHandle, alpha=1.0, beta=0.0, 
+                                 handle=cudnnHandle, alpha=1.0, beta=0.0,
                                  algorithm=CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM,
                                  workSpace=C_NULL, workSpaceSizeInBytes=0,
                                  cd=nothing, o...)
@@ -373,13 +372,13 @@ function cudnnConvolutionForward(src, filter, dest=nothing;
     cd1 = (cd == nothing ? CD(src; o...) : cd)
     @assert eltype(filter) == eltype(src)
     osize = cudnnGetConvolutionNdForwardOutputDim(src,filter; cd=cd1)
-    (dest == nothing) && (dest = CudaArray(eltype(src), osize))
+    (dest == nothing) && (dest = CuArray(eltype(src), osize))
     @assert osize == size(dest)
     @assert eltype(dest) == eltype(src)
     wsize = cudnnGetConvolutionForwardWorkspaceSize(src, filter, dest; algorithm=algorithm, cd=cd1)
     if ((wsize > 0) && (workSpace == C_NULL || workSpaceSizeInBytes < wsize))
         workSpaceSizeInBytes = wsize
-        ws = CudaArray(Int8, workSpaceSizeInBytes)
+        ws = CuArray(Int8, workSpaceSizeInBytes)
     else
         ws = workSpace
     end
@@ -388,7 +387,7 @@ function cudnnConvolutionForward(src, filter, dest=nothing;
                             FD(filter),filter,
                             cd1,algorithm,ws,workSpaceSizeInBytes,
                             cptr(beta,dest),TD(dest),dest)
-    ws === workSpace || free(ws)
+    # ws === workSpace || free(ws)
     # cd1 === cd || free(cd1)
     return dest
 end
@@ -396,7 +395,7 @@ end
 # conv2(x,w) in Julia performs 2-D convolution with padding equal to
 # one less than the w dimensions.
 
-Base.conv2{T}(src::AbstractCudaArray{T}, filter::AbstractCudaArray{T}, dest=nothing)=
+Base.conv2{T}(src::CuArray{T}, filter::CuArray{T}, dest=nothing)=
     cudnnConvolutionForward(src, filter, dest; cd=CD(src; padding = (size(filter,1)-1, size(filter,2)-1)))
 
 # n=h=w=1 for dest and c same as input.  CUDNN seems to assume a
@@ -408,7 +407,7 @@ Base.conv2{T}(src::AbstractCudaArray{T}, filter::AbstractCudaArray{T}, dest=noth
 # dJ/db=dest.  Well, we simply need to add up all dy where a
 # particular b was added to get db.  This means dest is just the sum
 # of src entries for every channel.
-function cudnnConvolutionBackwardBias(src, dest=CudaArray(eltype(src),(1,1,size(src,3),1));
+function cudnnConvolutionBackwardBias(src, dest=CuArray(eltype(src),(1,1,size(src,3),1));
                                       handle=cudnnHandle, alpha=1.0, beta=0.0)
     cudnnConvolutionBackwardBias(handle,cptr(alpha,src),TD(src,4),src,cptr(beta,dest),TD(dest,4),dest)
     return dest
@@ -417,7 +416,7 @@ end
 # I am guessing if y=w*x+b going forward, the arguments below
 # correspond to src=x, diff=dy, grad=dw.
 function cudnnConvolutionBackwardFilter(src, diff, grad;
-                                        handle=cudnnHandle, alpha=1.0, beta=0.0, 
+                                        handle=cudnnHandle, alpha=1.0, beta=0.0,
                                         algo=CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0,
                                         workSpace=C_NULL, workSpaceSizeInBytes=0,
                                         cd=nothing, o...)
@@ -427,7 +426,7 @@ function cudnnConvolutionBackwardFilter(src, diff, grad;
                                    TD(diff),diff,cd1,
                                    algo, workSpace, workSpaceSizeInBytes,
                                    cptr(beta,grad),FD(grad),grad) :
-    CUDNN_VERSION >= 3000 ? 
+    CUDNN_VERSION >= 3000 ?
     cudnnConvolutionBackwardFilter_v3(handle,
                                       cptr(alpha,src),TD(src),src,
                                       TD(diff),diff,cd1,
@@ -443,18 +442,18 @@ end
 # I am guessing if y=w*x+b going forward, the arguments below
 # correspond to filter=w, diff=dy, grad=dx.
 function cudnnConvolutionBackwardData(filter, diff, grad;
-                                      handle=cudnnHandle, alpha=1.0, beta=0.0, 
+                                      handle=cudnnHandle, alpha=1.0, beta=0.0,
                                       algo=CUDNN_CONVOLUTION_BWD_DATA_ALGO_0,
                                       workSpace=C_NULL, workSpaceSizeInBytes=0,
                                       cd=nothing, o...)
     cd1 = (cd == nothing ? CD(filter; o...) : cd)
-    CUDNN_VERSION >= 4000 ? 
+    CUDNN_VERSION >= 4000 ?
     cudnnConvolutionBackwardData(handle,cptr(alpha,diff),
                                  FD(filter),filter,
                                  TD(diff),diff,cd1,
                                  algo, workSpace, workSpaceSizeInBytes,
                                  cptr(beta,grad),TD(grad),grad) :
-    CUDNN_VERSION >= 3000 ? 
+    CUDNN_VERSION >= 3000 ?
     cudnnConvolutionBackwardData_v3(handle,cptr(alpha,diff),
                                     FD(filter),filter,
                                     TD(diff),diff,cd1,
@@ -498,24 +497,24 @@ end
 # CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING is buggy when padding >
 # 0 or else I have no idea what it is doing.
 
-function cudnnPoolingForward(src, dest; 
+function cudnnPoolingForward(src, dest;
                              handle=cudnnHandle, alpha=1.0, beta=0.0,
                              pd = nothing, o...)
     pd1 = (pd == nothing ? PD(src; o...) : pd)
-    cudnnPoolingForward(handle, pd1, 
+    cudnnPoolingForward(handle, pd1,
                         cptr(alpha,src), TD(src), src,
                         cptr(beta,dest), TD(dest), dest)
     # pd1 === pd || free(pd1)
     return dest
 end
 
-function cudnnPoolingBackward(src, srcDiff, dest, destDiff; 
+function cudnnPoolingBackward(src, srcDiff, dest, destDiff;
                               handle=cudnnHandle, alpha=1.0, beta=0.0,
                               pd = nothing, o...)
     pd1 = (pd == nothing ? PD(src; o...) : pd)
-    cudnnPoolingBackward(handle, pd1, 
-                         cptr(alpha,src), TD(src), src, 
-                         TD(srcDiff), srcDiff, 
+    cudnnPoolingBackward(handle, pd1,
+                         cptr(alpha,src), TD(src), src,
+                         TD(srcDiff), srcDiff,
                          TD(dest), dest,
                          cptr(beta,destDiff), TD(destDiff), destDiff)
     # pd1 === pd || free(pd1)
@@ -526,7 +525,7 @@ end
 # It is also in the static library but not the .so!  Weird.
 # v3 update: now it is in the library, but it is buggy, just gives the dimensions of src back.
 # v4 update: still buggy, I am amazed.
-function cudnnGetPoolingNdForwardOutputDim_buggy(pd::PD, src::AbstractCudaArray)
+function cudnnGetPoolingNdForwardOutputDim_buggy(pd::PD, src::CuArray)
     if CUDNN_VERSION >= 3000
         nbDims = ndims(src)
         outputTensorDimA = Array(Cint, nbDims)
@@ -536,7 +535,7 @@ function cudnnGetPoolingNdForwardOutputDim_buggy(pd::PD, src::AbstractCudaArray)
 end
 
 # Here is the corrected version based on the specs
-function cudnnGetPoolingNdForwardOutputDim(pd::PD, input::AbstractCudaArray)
+function cudnnGetPoolingNdForwardOutputDim(pd::PD, input::CuArray)
     dims = [size(input)...]
     (mode, mpno, pdims, window, padding, stride) = cudnnGetPoolingNdDescriptor(pd)
     for i=1:length(dims)-2
@@ -560,7 +559,7 @@ function cudnnLRNCrossChannelForward(src, dest;
     return dest
 end
 
-function cudnnLRNCrossChannelBackward(src, srcDiff, dest, destDiff; 
+function cudnnLRNCrossChannelBackward(src, srcDiff, dest, destDiff;
                                       handle=cudnnHandle,
                                       mode=CUDNN_LRN_CROSS_CHANNEL_DIM1,
                                       alpha=1.0, beta=0.0,
@@ -568,7 +567,7 @@ function cudnnLRNCrossChannelBackward(src, srcDiff, dest, destDiff;
     ld1 = (ld != nothing ? ld : LD(; o...))
     cudnnLRNCrossChannelBackward(handle, ld1, mode,
                                  cptr(alpha,src), TD(src), src,
-                                 TD(srcDiff), srcDiff, 
+                                 TD(srcDiff), srcDiff,
                                  TD(dest), dest,
                                  cptr(beta,destDiff), TD(destDiff), destDiff)
     return destDiff
@@ -590,13 +589,13 @@ function cudnnDivisiveNormalizationForward(src, dest;
                                       cptr(alpha,src), TD(src), src,
                                       means, p1, p2,
                                       cptr(beta,dest), TD(dest), dest)
-    p1 === temp1 || free(p1)
-    p2 === temp2 || free(p2)
+    # p1 === temp1 || free(p1)
+    # p2 === temp2 || free(p2)
     return dest
 end
 
 function cudnnDivisiveNormalizationBackward(src, srcDiff, destDiff;
-                                            srcMeans=nothing, destMeansDiff=nothing, 
+                                            srcMeans=nothing, destMeansDiff=nothing,
                                             temp1=nothing, temp2=nothing,
                                             handle=cudnnHandle,
                                             mode=CUDNN_DIVNORM_PRECOMPUTED_MEANS,
@@ -611,8 +610,8 @@ function cudnnDivisiveNormalizationBackward(src, srcDiff, destDiff;
                                        cptr(alpha,src), TD(src), src,
                                        srcMeans, srcDiff, p1, p2,
                                        cptr(beta,destDiff), TD(destDiff), destDiff, destMeansDiff)
-    p1 === temp1 || free(p1)
-    p2 === temp2 || free(p2)
+    # p1 === temp1 || free(p1)
+    # p2 === temp2 || free(p2)
     return destDiff
 end
 
@@ -639,20 +638,20 @@ end
 # alpha * src + beta * dest -> dest
 # Both beta and dest optional, beta=0 if not specified, dest is allocated with ones if not specified.
 # These defaults give the expected answers for (alpha * src) and (alpha * src + beta)
-# The doc says no in-place, i.e. src and dest should not overlap.  
+# The doc says no in-place, i.e. src and dest should not overlap.
 # My experiments say otherwise but I will go with the doc just in case.
 
-function cudnnTransformTensor(alpha::Number, src::AbstractCudaArray, beta::Number=0, dest::AbstractCudaArray=ones(src); 
+function cudnnTransformTensor(alpha::Number, src::CuArray, beta::Number=0, dest::CuArray=ones(src);
                               handle=cudnnHandle)
-    cudnnTransformTensor(handle, 
-                         cptr(alpha,src), TD(src,4), src, 
+    cudnnTransformTensor(handle,
+                         cptr(alpha,src), TD(src,4), src,
                          cptr(beta,dest), TD(dest,4), dest)
     return dest
 end
 
 # Refer to cudnn doc to see what different add modes do
 
-function cudnnAddTensor(bias::AbstractCudaArray, src::AbstractCudaArray;
+function cudnnAddTensor(bias::CuArray, src::CuArray;
                         handle=cudnnHandle, alpha=1.0, beta=1.0, mode=CUDNN_ADD_SAME_C)
     CUDNN_VERSION >= 4000 ? cudnnAddTensor(handle, cptr(alpha,bias), TD(bias,4), bias, cptr(beta,src), TD(src,4), src) :
     CUDNN_VERSION >= 3000 ? cudnnAddTensor_v3(handle, cptr(alpha,bias), TD(bias,4), bias, cptr(beta,src), TD(src,4), src) :
@@ -663,14 +662,14 @@ end
 
 # src .= value
 
-function cudnnSetTensor(src::AbstractCudaArray, value::Number; handle=cudnnHandle)
+function cudnnSetTensor(src::CuArray, value::Number; handle=cudnnHandle)
     cudnnSetTensor(handle, TD(src,4), src, cptr(value,src))
     return src
 end
 
 # src .*= alpha
 
-function cudnnScaleTensor(src::AbstractCudaArray, alpha::Number; handle=cudnnHandle)
+function cudnnScaleTensor(src::CuArray, alpha::Number; handle=cudnnHandle)
     cudnnScaleTensor(handle, TD(src,4), src, cptr(alpha,src))
     return src
 end
@@ -678,16 +677,16 @@ end
 # Apply activation fn to each element of src (dest optional, in-place by default)
 # mode is one of CUDNN_ACTIVATION_{SIGMOID,RELU,TANH}
 
-function cudnnActivationForward(src::AbstractCudaArray, dest::AbstractCudaArray=src; handle=cudnnHandle, 
+function cudnnActivationForward(src::CuArray, dest::CuArray=src; handle=cudnnHandle,
                                 mode=CUDNN_ACTIVATION_RELU, reluNanOpt=CUDNN_NOT_PROPAGATE_NAN, reluCeiling=1.0,
                                 alpha=1.0, beta=0.0)
     if CUDNN_VERSION >= 4000
         cudnnActivationForward_v4(handle, AD(mode, reluNanOpt, reluCeiling),
-                                  cptr(alpha,src), TD(src,4), src, 
+                                  cptr(alpha,src), TD(src,4), src,
                                   cptr(beta,dest), TD(dest,4), dest)
     else
-        cudnnActivationForward(handle, mode, 
-                               cptr(alpha,src), TD(src,4), src, 
+        cudnnActivationForward(handle, mode,
+                               cptr(alpha,src), TD(src,4), src,
                                cptr(beta,dest), TD(dest,4), dest)
     end
     return dest
@@ -700,19 +699,19 @@ end
 # dx=destDiff, dy=srcDiff.  The gradient calculation should not need
 # x=dest.  cudnn seems to set dx=0 whereever x=0.
 
-function cudnnActivationBackward(src::AbstractCudaArray, srcDiff::AbstractCudaArray, dest::AbstractCudaArray=src, destDiff::AbstractCudaArray=srcDiff; 
+function cudnnActivationBackward(src::CuArray, srcDiff::CuArray, dest::CuArray=src, destDiff::CuArray=srcDiff;
                                  mode=CUDNN_ACTIVATION_RELU, reluNanOpt=CUDNN_NOT_PROPAGATE_NAN, reluCeiling=1.0,
-                                 handle=cudnnHandle, alpha=1.0, beta=0.0) 
+                                 handle=cudnnHandle, alpha=1.0, beta=0.0)
     if CUDNN_VERSION >= 4000
-        cudnnActivationBackward_v4(handle, AD(mode, reluNanOpt, reluCeiling), 
-                                   cptr(alpha,src), TD(src,4), src, 
-                                   TD(srcDiff,4), srcDiff, 
+        cudnnActivationBackward_v4(handle, AD(mode, reluNanOpt, reluCeiling),
+                                   cptr(alpha,src), TD(src,4), src,
+                                   TD(srcDiff,4), srcDiff,
                                    TD(dest,4), dest,
                                    cptr(beta,destDiff), TD(destDiff,4), destDiff)
     else
-        cudnnActivationBackward(handle, mode, 
-                                cptr(alpha,src), TD(src,4), src, 
-                                TD(srcDiff,4), srcDiff, 
+        cudnnActivationBackward(handle, mode,
+                                cptr(alpha,src), TD(src,4), src,
+                                TD(srcDiff,4), srcDiff,
                                 TD(dest,4), dest,
                                 cptr(beta,destDiff), TD(destDiff,4), destDiff)
     end
@@ -735,7 +734,7 @@ end
 # Note that an NC11 tensor is constructed from a julia array of size (1,1,C,N).
 # Can we do in-place?  It turns out yes (undocumented).
 
-function cudnnSoftmaxForward(src::AbstractCudaArray, dest::AbstractCudaArray=src; 
+function cudnnSoftmaxForward(src::CuArray, dest::CuArray=src;
                              handle=cudnnHandle,
                              algorithm=CUDNN_SOFTMAX_ACCURATE, # or CUDNN_SOFTMAX_FAST
                              mode=CUDNN_SOFTMAX_MODE_INSTANCE, # or CUDNN_SOFTMAX_MODE_CHANNEL
@@ -754,7 +753,7 @@ end
 # docs about in-place ops but I will assume it is possible as the
 # structure is similar to cudnnActivateBackward (except dest=x is not in
 # the arglist).
-# 
+#
 # But what does it compute?  Given a one-of-k vector of correct
 # answers ai we have: dJ/dxi = (yi - ai), so what is srcDiff?  Do they
 # really mean dJ/dyi?  Who computes dJ/dyi?  What idiot wrote this
@@ -771,7 +770,7 @@ end
 # make learningRate specify the same step size regardless of batch
 # size.  (Or maybe one should divide the loss J instead).
 
-function cudnnSoftmaxBackward(src::AbstractCudaArray, srcDiff::AbstractCudaArray, destDiff::AbstractCudaArray=srcDiff;
+function cudnnSoftmaxBackward(src::CuArray, srcDiff::CuArray, destDiff::CuArray=srcDiff;
                               handle=cudnnHandle,
                               algorithm=CUDNN_SOFTMAX_ACCURATE, # or CUDNN_SOFTMAX_FAST
                               mode=CUDNN_SOFTMAX_MODE_INSTANCE, # or CUDNN_SOFTMAX_MODE_CHANNEL
@@ -787,12 +786,12 @@ end
 ### 8. HELPER FUNCTIONS ##################################################
 
 # This is missing from CUDArt:
-Base.strides(a::AbstractCudaArray)=map(i->stride(a,i), tuple(1:ndims(a)...))
+Base.strides(a::CuArray)=map(i->stride(a,i), tuple(1:ndims(a)...))
 
 # For low level cudnn functions that require a pointer to a number
-cptr(x,a::CudaArray{Float64})=Float64[x]
-cptr(x,a::CudaArray{Float32})=Float32[x]
-cptr(x,a::CudaArray{Float16})=Float32[x]
+cptr(x,a::CuArray{Float64})=Float64[x]
+cptr(x,a::CuArray{Float32})=Float32[x]
+cptr(x,a::CuArray{Float16})=Float32[x]
 
 inttuple(x)=tuple(Int[x...]...)
 
@@ -840,20 +839,20 @@ end # module
 # descriptors are created and destroyed by the operations that need
 # them.  Thus the following functions have been modified:
 
-# function cudnnConvolutionForward(src::AbstractCudaArray, filter::AbstractCudaArray, dest=nothing;
-#                                  handle=cudnnHandle, alpha=1.0, beta=0.0, 
+# function cudnnConvolutionForward(src::CuArray, filter::CuArray, dest=nothing;
+#                                  handle=cudnnHandle, alpha=1.0, beta=0.0,
 #                                  convDesc=defaultConvolutionDescriptor,
 #                                  algorithm=CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM,
 #                                  workSpace=C_NULL, workSpaceSizeInBytes=0)
 #     @assert eltype(filter) == eltype(src)
 #     osize = cudnnGetConvolutionNdForwardOutputDim(src,filter;convDesc=convDesc)
-#     (dest == nothing) && (dest = CudaArray(eltype(src), osize))
+#     (dest == nothing) && (dest = CuArray(eltype(src), osize))
 #     @assert osize == size(dest)
 #     @assert eltype(dest) == eltype(src)
 #     wsize = cudnnGetConvolutionForwardWorkspaceSize(src, filter, dest; algorithm=algorithm)
 #     if ((wsize > 0) && (workSpace == C_NULL || workSpaceSizeInBytes < wsize))
 #         workSpaceSizeInBytes = wsize
-#         workSpace = CudaArray(Int8, workSpaceSizeInBytes)
+#         workSpace = CuArray(Int8, workSpaceSizeInBytes)
 #     end
 #     cudnnConvolutionForward(handle,
 #                             cptr(alpha,src),TD(src),src,
@@ -866,9 +865,9 @@ end # module
 # type ConvolutionDescriptor; ptr; padding; stride; upscale; mode; datatype; end
 
 # # TODO: accept single number args for padding etc.
-# function ConvolutionDescriptor(; padding=(0,0), 
-#                                stride=map(x->1,padding), 
-#                                upscale=map(x->1,padding), 
+# function ConvolutionDescriptor(; padding=(0,0),
+#                                stride=map(x->1,padding),
+#                                upscale=map(x->1,padding),
 #                                mode=CUDNN_CONVOLUTION,
 #                                datatype=Float64)
 #     @assert in(mode, (CUDNN_CONVOLUTION, CUDNN_CROSS_CORRELATION))
@@ -896,8 +895,8 @@ end # module
 # # TODO: allow initialization with a single number
 
 # function PoolingDescriptor(dims; padding=map(x->0,dims), stride=dims, mode=CUDNN_POOLING_MAX)
-#     @assert in(mode, (CUDNN_POOLING_MAX, 
-#                       CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING, 
+#     @assert in(mode, (CUDNN_POOLING_MAX,
+#                       CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING,
 #                       CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING))
 #     @assert length(dims) == length(padding) == length(stride)
 #     pd = cudnnPoolingDescriptor_t[0]
@@ -911,14 +910,14 @@ end # module
 # free(pd::PoolingDescriptor)=cudnnDestroyPoolingDescriptor(pd.ptr)
 # unsafe_convert(::Type{cudnnPoolingDescriptor_t}, pd::PoolingDescriptor)=pd.ptr
 
-# function cudnnPoolingForward(pd::PoolingDescriptor, src::AbstractCudaArray, dest::AbstractCudaArray; 
+# function cudnnPoolingForward(pd::PoolingDescriptor, src::CuArray, dest::CuArray;
 #                              handle=cudnnHandle, alpha=1.0, beta=0.0)
-#     cudnnPoolingForward(handle, pd, 
+#     cudnnPoolingForward(handle, pd,
 #                         cptr(alpha,src), TD(src), src,
 #                         cptr(beta,dest), TD(dest), dest)
 #     return dest
 # end
-                             
+
 # # Read info from gpu for debugging
 # function cudnnGetPoolingNdDescriptor(pd::PoolingDescriptor)
 #     nd = length(pd.dims)
@@ -938,4 +937,3 @@ end # module
 # free(fd::FD)=cudnnDestroyFilterDescriptor(fd.ptr)
 # unsafe_convert(::Type{cudnnTensorDescriptor_t}, td::TD)=td.ptr
 # unsafe_convert(::Type{cudnnFilterDescriptor_t}, fd::FD)=fd.ptr
-

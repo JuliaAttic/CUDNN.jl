@@ -34,11 +34,11 @@ for the complete interface.
 
 ## Types
 
-All CUDNN operations act on CudaArray's which are provided by
+All CUDNN operations act on CuArray's which are provided by
 [CUDArt](https://github.com/JuliaGPU/CUDArt.jl).  Currently only
 Float32 and Float64 are supported for element types, and only 4-D
-CudaArray's (useful for 2-D images) are supported by the majority of
-CUDNN functions.  5-D CudaArray operations (to process 3-D point
+CuArray's (useful for 2-D images) are supported by the majority of
+CUDNN functions.  5-D CuArray operations (to process 3-D point
 clouds) and Float16 type support came with CUDNN v3 but have not been
 tested in CUDNN.jl.
 
@@ -46,9 +46,9 @@ The default order of tensor dimensions in the C library documentation
 is NCHW, with W being the fastest changing dimension.  These stand for
 number of images (N), channels (C), height (H) and width (W) for image
 applications.  C is row-major whereas Julia is column major.  So the
-default size of CudaArray tensors in CUDNN.jl are (W,H,C,N) with W
+default size of CuArray tensors in CUDNN.jl are (W,H,C,N) with W
 being fastest changing dimension.  Similarly the default order of
-CudaArray filter dimensions in Julia are (W,H,C,K) standing for width,
+CuArray filter dimensions in Julia are (W,H,C,K) standing for width,
 height, number of input feature maps, and number of output feature
 maps respectively.
 
@@ -61,7 +61,7 @@ see ConvolutionDescriptor in CUDNN.jl and the C library documentation.
 For 2-D images if src has size (W,H,C,N) and filter has size
 (X,Y,C,K), the output dest will have size (W-X+1,H-Y+1,K,N) .  If dest
 is not specified it will be allocated.  The base `conv2` function has
-been overloaded to handle 4-D CudaArray's using
+been overloaded to handle 4-D CuArray's using
 cudnnConvolutionForward with padding size one less than filter size.
 
 For the following, assume y=x*w+b where x is the forward input to a
