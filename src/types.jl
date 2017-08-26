@@ -13,7 +13,7 @@ const CUDNN_LRN_MIN_K = 1.0e-5
 const CUDNN_LRN_MIN_BETA = 0.01
 const CUDNN_BN_MIN_EPSILON = 1.0e-5
 
-type cudnnContext
+mutable struct cudnnContext
 end
 
 const cudnnHandle_t = Ptr{cudnnContext}
@@ -33,32 +33,32 @@ const CUDNN_STATUS_NOT_SUPPORTED = (UInt32)(9)
 const CUDNN_STATUS_LICENSE_ERROR = (UInt32)(10)
 # end enum cudnnStatus_t
 
-type cudnnTensorStruct
+mutable struct cudnnTensorStruct
 end
 
 const cudnnTensorDescriptor_t = Ptr{cudnnTensorStruct}
 
-type cudnnConvolutionStruct
+mutable struct cudnnConvolutionStruct
 end
 
 const cudnnConvolutionDescriptor_t = Ptr{cudnnConvolutionStruct}
 
-type cudnnPoolingStruct
+mutable struct cudnnPoolingStruct
 end
 
 const cudnnPoolingDescriptor_t = Ptr{cudnnPoolingStruct}
 
-type cudnnFilterStruct
+mutable struct cudnnFilterStruct
 end
 
 const cudnnFilterDescriptor_t = Ptr{cudnnFilterStruct}
 
-type cudnnLRNStruct
+mutable struct cudnnLRNStruct
 end
 
 const cudnnLRNDescriptor_t = Ptr{cudnnLRNStruct}
 
-type cudnnActivationStruct
+mutable struct cudnnActivationStruct
 end
 
 const cudnnActivationDescriptor_t = Ptr{cudnnActivationStruct}
@@ -115,7 +115,7 @@ const CUDNN_CONVOLUTION_FWD_ALGO_FFT = (UInt32)(4)
 const CUDNN_CONVOLUTION_FWD_ALGO_FFT_TILING = (UInt32)(5)
 # end enum cudnnConvolutionFwdAlgo_t
 
-type cudnnConvolutionFwdAlgoPerf_t
+mutable struct cudnnConvolutionFwdAlgoPerf_t
     algo::cudnnConvolutionFwdAlgo_t
     status::cudnnStatus_t
     time::Cfloat
@@ -137,7 +137,7 @@ const CUDNN_CONVOLUTION_BWD_FILTER_ALGO_FFT = (UInt32)(2)
 const CUDNN_CONVOLUTION_BWD_FILTER_ALGO_3 = (UInt32)(3)
 # end enum cudnnConvolutionBwdFilterAlgo_t
 
-type cudnnConvolutionBwdFilterAlgoPerf_t
+mutable struct cudnnConvolutionBwdFilterAlgoPerf_t
     algo::cudnnConvolutionBwdFilterAlgo_t
     status::cudnnStatus_t
     time::Cfloat
@@ -159,7 +159,7 @@ const CUDNN_CONVOLUTION_BWD_DATA_ALGO_FFT = (UInt32)(2)
 const CUDNN_CONVOLUTION_BWD_DATA_ALGO_FFT_TILING = (UInt32)(3)
 # end enum cudnnConvolutionBwdDataAlgo_t
 
-type cudnnConvolutionBwdDataAlgoPerf_t
+mutable struct cudnnConvolutionBwdDataAlgoPerf_t
     algo::cudnnConvolutionBwdDataAlgo_t
     status::cudnnStatus_t
     time::Cfloat
