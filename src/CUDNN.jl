@@ -51,7 +51,7 @@ import Base: unsafe_convert, conv2, strides
 
 # This is missing from CUDArt:
 type cudaStream; end
-typealias cudaStream_t Ptr{cudaStream}
+const cudaStream_t = Ptr{cudaStream}
 
 # This is missing from cudnn.h:
 const CUDNN_DIM_MAX = 8
@@ -195,9 +195,9 @@ const CUDNN_MAX_DIM = 8
 function cudnnGetTensorNdDescriptor(td::TD)
     nd=CUDNN_MAX_DIM
     dataType = cudnnDataType_t[0]
-    np = Array(Cint, 1)
-    dimA = Array(Cint, nd)
-    strideA = Array(Cint, nd)
+    np = Array{Cint}(1)
+    dimA = Array{Cint}(nd)
+    strideA = Array{Cint}(nd)
     cudnnGetTensorNdDescriptor(td,nd,dataType,np,dimA,strideA)
     n = np[1]
     return (dataType[1], n, inttuple(dimA[1:n]), inttuple(strideA[1:n]))
@@ -206,8 +206,8 @@ end
 function cudnnGetFilterNdDescriptor(fd::FD)
     nd=CUDNN_MAX_DIM
     dataType = cudnnDataType_t[0]
-    np = Array(Cint, 1)
-    dimA = Array(Cint, nd)
+    np = Array{Cint}(1)
+    dimA = Array{Cint}(nd)
     format = cudnnTensorFormat_t[CUDNN_TENSOR_NCHW]
     CUDNN_VERSION >= 4000 ?
     cudnnGetFilterNdDescriptor_v4(fd,nd,dataType,format,np,dimA) :
@@ -219,9 +219,9 @@ end
 function cudnnGetConvolutionNdDescriptor(cd::CD)
     nd = CUDNN_DIM_MAX - 2
     np = Cint[0]
-    p = Array(Cint, nd)
-    s = Array(Cint, nd)
-    u = Array(Cint, nd)
+    p = Array{Cint}(nd)
+    s = Array{Cint}(nd)
+    u = Array{Cint}(nd)
     m = cudnnConvolutionMode_t[0]
     t = cudnnDataType_t[0]
     CUDNN_VERSION >= 4000 ? cudnnGetConvolutionNdDescriptor(cd, nd, np, p, s, u, m, t) :
@@ -235,9 +235,9 @@ function cudnnGetPoolingNdDescriptor(pd::PD)
     nd = CUDNN_MAX_DIM - 2
     np = Cint[0]
     m = cudnnPoolingMode_t[0]
-    s = Array(Cint, nd)
-    p = Array(Cint, nd)
-    t = Array(Cint, nd)
+    s = Array{Cint}(nd)
+    p = Array{Cint}(nd)
+    t = Array{Cint}(nd)
     maxpoolingNanOpt = cudnnNanPropagation_t[CUDNN_NOT_PROPAGATE_NAN]
     CUDNN_VERSION >= 4000 ?
     cudnnGetPoolingNdDescriptor_v4(pd, nd, m, maxpoolingNanOpt, np, s, p, t) :
@@ -300,7 +300,7 @@ end
 function cudnnGetConvolutionNdForwardOutputDim(src::CuArray, filter::CuArray; cd=nothing, o...)
     cd1 = (cd == nothing ? CD(src; o...) : cd)
     nbDims = ndims(src)
-    outputDim = Array(Cint, nbDims)
+    outputDim = Array{Cint}(nbDims)
     cudnnGetConvolutionNdForwardOutputDim(cd1, TD(src), FD(filter), nbDims, outputDim)
     # cd1 === cd || free(cd1)
     tuple(Int[reverse(outputDim)...]...)
@@ -528,7 +528,7 @@ end
 function cudnnGetPoolingNdForwardOutputDim_buggy(pd::PD, src::CuArray)
     if CUDNN_VERSION >= 3000
         nbDims = ndims(src)
-        outputTensorDimA = Array(Cint, nbDims)
+        outputTensorDimA = Array{Cint}(nbDims)
         cudnnGetPoolingNdForwardOutputDim(pd.ptr, TD(src), nbDims, outputTensorDimA)
         tuple(Int[reverse(outputTensorDimA)...]...)
     end
@@ -923,9 +923,9 @@ end # module
 #     nd = length(pd.dims)
 #     m = cudnnPoolingMode_t[0]
 #     n = Cint[0]
-#     s = Array(Cint, nd)
-#     p = Array(Cint, nd)
-#     t = Array(Cint, nd)
+#     s = Array{Cint}(nd)
+#     p = Array{Cint}(nd)
+#     t = Array{Cint}(nd)
 #     cudnnGetPoolingNdDescriptor(pd, nd, m, n, s, p, t)
 #     inttuple(x)=tuple(Int[x...]...)
 #     (m[1], n[1], inttuple(s), inttuple(p), inttuple(t))

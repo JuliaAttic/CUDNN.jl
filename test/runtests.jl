@@ -68,7 +68,7 @@ cudnnGetTensor4dDescriptor(d[1],dt,sn,sc,sh,sw,tn,tc,th,tw)
 
 
 using CUDNN: cudnnGetTensorNdDescriptor
-nd=4; nbDims=Cint[0]; dimA=Array(Cint,nd); strideA=Array(Cint,nd)
+nd=4; nbDims=Cint[0]; dimA=Array{Cint}(nd); strideA=Array{Cint}(nd)
 cudnnGetTensorNdDescriptor(d[1],nd,dt,nbDims,dimA,strideA)
 @test (nbDims, dimA, strideA) == (Cint[4], Cint[2,3,4,5], Cint[60,20,5,1])
 
@@ -121,7 +121,7 @@ myrelu(y,dy,dx)=(copy!(dx,dy);for i=1:length(y); (y[i]==zero(y[i]))&&(dx[i]=zero
 
 using CUDNN: CUDNN_ACTIVATION_SIGMOID
 mysigm(x,y)=(for i=1:length(y); y[i]=(1.0/(1.0+exp(-x[i]))); end; y)
-epseq(x,y)=(maximum(abs(x-y)) < 1e-7)
+epseq(x,y)=(maximum(abs.(x-y)) < 1e-7)
 x = rand(5,4,3,2) - 0.5; tx = CuArray(x)
 y = zeros(5,4,3,2); ty = CuArray(y)
 # @test epseq(collect(cudnnActivationForward(tx, ty, mode=CUDNN_ACTIVATION_SIGMOID)), mysigm(x, y))
@@ -148,8 +148,8 @@ x = (rand(5,4,3,2) - 0.5)
 tx = CuArray(x)
 Base.zeros(a::CuArray)=cudnnSetTensor(similar(a), zero(eltype(a)))
 ty = zeros(tx)
-@test epseq(collect(cudnnSoftmaxForward(tx, ty; mode=CUDNN_SOFTMAX_MODE_INSTANCE)), exp(x)./sum(exp(x), (1,2,3)))
-@test epseq(collect(cudnnSoftmaxForward(tx, ty; mode=CUDNN_SOFTMAX_MODE_CHANNEL)), exp(x)./sum(exp(x), 3))
+@test epseq(collect(cudnnSoftmaxForward(tx, ty; mode=CUDNN_SOFTMAX_MODE_INSTANCE)), exp.(x)./sum(exp.(x), (1,2,3)))
+@test epseq(collect(cudnnSoftmaxForward(tx, ty; mode=CUDNN_SOFTMAX_MODE_CHANNEL)), exp.(x)./sum(exp.(x), 3))
 
 
 # Do we feed the gold probabilities p or the output gradients (1-p/q) to cudnnSoftmaxBackward?
