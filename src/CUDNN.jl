@@ -50,7 +50,7 @@ export cudnnLRNCrossChannelForward, cudnnLRNCrossChannelBackward, cudnnDivisiveN
 import Base: unsafe_convert, conv2, strides
 
 # This is missing from CUDArt:
-mutable struct cudaStream; end
+struct cudaStream; end
 const cudaStream_t = Ptr{cudaStream}
 
 # This is missing from cudnn.h:
