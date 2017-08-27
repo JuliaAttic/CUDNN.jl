@@ -50,7 +50,7 @@ export cudnnLRNCrossChannelForward, cudnnLRNCrossChannelBackward, cudnnDivisiveN
 import Base: unsafe_convert, conv2, strides
 
 # This is missing from CUDArt:
-type cudaStream; end
+struct cudaStream; end
 const cudaStream_t = Ptr{cudaStream}
 
 # This is missing from cudnn.h:
@@ -87,12 +87,12 @@ juliaDataType(a)=(a==CUDNN_DATA_HALF ? Float16 :
 
 ### 1. DESCRIPTORS ##################################################
 
-type TD; ptr; end
-type FD; ptr; end
-type CD; ptr; end
-type PD; ptr; end
-type LD; ptr; end
-type AD; ptr; end
+mutable struct TD; ptr; end
+mutable struct FD; ptr; end
+mutable struct CD; ptr; end
+mutable struct PD; ptr; end
+mutable struct LD; ptr; end
+mutable struct AD; ptr; end
 
 free(td::TD)=cudnnDestroyTensorDescriptor(td.ptr)
 free(fd::FD)=cudnnDestroyFilterDescriptor(fd.ptr)
@@ -395,7 +395,7 @@ end
 # conv2(x,w) in Julia performs 2-D convolution with padding equal to
 # one less than the w dimensions.
 
-Base.conv2{T}(src::CuArray{T}, filter::CuArray{T}, dest=nothing)=
+Base.conv2(src::CuArray{T}, filter::CuArray{T}, dest=nothing) where {T}=
     cudnnConvolutionForward(src, filter, dest; cd=CD(src; padding = (size(filter,1)-1, size(filter,2)-1)))
 
 # n=h=w=1 for dest and c same as input.  CUDNN seems to assume a
