@@ -1,20 +1,12 @@
 
-
 using CuArrays
+using CUDAapi
+import NNlib: conv2d, conv2d_grad_w, conv2d_grad_x, pool, pool_grad
 
 const Cptr = Ptr{Void}
 macro gs(); if false; esc(:(ccall(("cudaDeviceSynchronize","libcudart"),UInt32,()))); end; end
 
-include("gpu.jl")
-include("common.jl")
+include("init.jl")
+include("descriptors.jl")
 include("conv.jl")
 include("pool.jl")
-
-# See if we have a gpu at initialization:
-function __init__()
-    try
-        r = gpu(true)        
-    catch e
-        gpu(false)
-    end
-end
