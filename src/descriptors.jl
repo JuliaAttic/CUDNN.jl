@@ -21,6 +21,7 @@ mutable struct FD; ptr
         @cuda(cudnn,cudnnCreateFilterDescriptor,(Ptr{Cptr},),d)
         n = ndims(a)
         sz = [Cint(size(a,n-i+1)) for i=1:n]
+        cudnnVersion = cudnn_version()
         if cudnnVersion >= 5000
             @cuda(cudnn,cudnnSetFilterNdDescriptor,
                   (Cptr,UInt32,UInt32,Cint,Ptr{Cint}),
@@ -45,6 +46,7 @@ mutable struct CD; ptr
         d = Cptr[0]
         @cuda(cudnn,cudnnCreateConvolutionDescriptor,(Ptr{Cptr},),d)
         nd = ndims(x)-2
+        cudnnVersion = cudnn_version()
         if cudnnVersion >= 4000
             @cuda(cudnn,cudnnSetConvolutionNdDescriptor,
                   (Cptr,Cint,Ptr{Cint},Ptr{Cint},Ptr{Cint},UInt32,UInt32),
@@ -69,6 +71,7 @@ mutable struct PD; ptr
         d = Cptr[0]
         @cuda(cudnn,cudnnCreatePoolingDescriptor,(Ptr{Cptr},),d)
         nd = ndims(x)-2
+        cudnnVersion = cudnn_version()
         if cudnnVersion >= 5000
             @cuda(cudnn,cudnnSetPoolingNdDescriptor,
                   (Cptr,UInt32,UInt32,Cint,Ptr{Cint},Ptr{Cint},Ptr{Cint}),
