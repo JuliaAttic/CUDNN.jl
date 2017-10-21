@@ -51,7 +51,7 @@ end
 @testset "pool" begin
 
     for T in [Float32, Float64]
-        x = rand(T, 8, 8, 3, 2)        
+        x = rand(T, 8, 8, 3, 2)
         cx = CuArray(x)
 
         @test isapprox(pool(x), pool(cx))
@@ -63,13 +63,13 @@ end
         cy = CuArray(y)
         cdy = CuArray(dy)
         @test isapprox(pool_grad(x, y, dy), pool_grad(cx, cy, cdy); atol=1e-5)
-        
+
         # with stride
         y = pool(x; stride=2)
         dy = randn(T, size(y))
         cy = CuArray(y)
         cdy = CuArray(dy)
-        @test isapprox(pool_grad(x, y, dy; stride=2), pool_grad(cx, cy, cdy; stride=2))        
+        @test isapprox(pool_grad(x, y, dy; stride=2), pool_grad(cx, cy, cdy; stride=2))
 
         # with padding
         y = pool(x; padding=1)
@@ -78,6 +78,22 @@ end
         cdy = CuArray(dy)
         @test isapprox(pool_grad(x, y, dy; padding=1), pool_grad(cx, cy, cdy; padding=1))
         @test isapprox(pool_grad(x, y, dy; padding=1), pool_grad(cx, cy, cdy; padding=1))
+    end
+
+end
+
+
+@testset "batchnorm" begin
+
+    # smoke tests
+    for T in [Float32, Float64]
+        x = CuArray(randn(T, 5, 4, 3, 2))
+        s = BatchNormState(x)        
+
+        y = batchnorm_train(x, s)
+        y = batchnorm_infer(x, s)
+        dy = similar(y)
+        dx = batchnorm_grad(x, dy, s)
     end
 
 end

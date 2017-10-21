@@ -2,14 +2,15 @@
 
 ## softmax
 
-# begin enum cudnnSoftmaxAlgorithm_t
-const cudnnSoftmaxAlgorithm_t = UInt32
 const CUDNN_SOFTMAX_FAST = (UInt32)(0)
 const CUDNN_SOFTMAX_ACCURATE = (UInt32)(1)
 const CUDNN_SOFTMAX_LOG = (UInt32)(2)
-# end enum cudnnSoftmaxAlgorithm_t
 
-# begin enum cudnnSoftmaxMode_t
-const cudnnSoftmaxMode_t = UInt32
 const CUDNN_SOFTMAX_MODE_INSTANCE = (UInt32)(0)
 const CUDNN_SOFTMAX_MODE_CHANNEL = (UInt32)(1)
+
+## batchnorm
+
+const CUDNN_BATCHNORM_PER_ACTIVATION = (UInt32)(0)
+const CUDNN_BATCHNORM_SPATIAL = (UInt32)(1)
+const CUDNN_BN_MIN_EPSILON = 1.0e-5

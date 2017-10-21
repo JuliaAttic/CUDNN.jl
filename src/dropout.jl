@@ -1,4 +1,6 @@
 
+## WARNING: this is an attempt to wrap cuDNNs dropout implementation
+##          it doesn't work and should be considered work in progress
 
 ## Dropout descriptor
 

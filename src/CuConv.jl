@@ -13,7 +13,14 @@ export
     pool,
     pool_back_x,
     unpool,
-    unpool_back_x
+    unpool_back_x,
+    batchnorm_train!,
+    batchnorm_infer!,
+    batchnorm_grad!,
+    batchnorm_train,
+    batchnorm_infer,
+    batchnorm_grad,
+    BatchNormState
 
 include("core.jl")
 
