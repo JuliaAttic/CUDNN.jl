@@ -4,6 +4,9 @@ using NNlib
 using Base.Test
 
 
+cu_isapprox(a, ca; kw...) = isapprox(CuArray(a), ca; kw...)
+
+
 @testset "conv" begin
 
     for T in [Float32, Float64]
@@ -12,26 +15,26 @@ using Base.Test
         cx = CuArray(x)
         cw = CuArray(w)
 
-        @test isapprox(conv2d(x, w), conv2d(cx, cw))
-        @test isapprox(conv2d(x, w; stride=2), conv2d(cx, cw; stride=2))
-        @test isapprox(conv2d(x, w; padding=1), conv2d(cx, cw; padding=1))
-        @test isapprox(conv2d(x, w; mode=1), conv2d(cx, cw; mode=1))
+        @test cu_isapprox(conv2d(x, w), conv2d(cx, cw))
+        @test cu_isapprox(conv2d(x, w; stride=2), conv2d(cx, cw; stride=2))
+        @test cu_isapprox(conv2d(x, w; padding=1), conv2d(cx, cw; padding=1))
+        @test cu_isapprox(conv2d(x, w; mode=1), conv2d(cx, cw; mode=1))
 
         y = conv2d(x, w)
         dy = randn(T, size(y))
         cy = CuArray(y)
         cdy = CuArray(dy)
-        @test isapprox(conv2d_grad_x(x, w, dy), conv2d_grad_x(cx, cw, cdy); atol=1e-5)
-        @test isapprox(conv2d_grad_w(x, w, dy), conv2d_grad_w(cx, cw, cdy); atol=1e-5)
+        @test cu_isapprox(conv2d_grad_x(x, w, dy), conv2d_grad_x(cx, cw, cdy); atol=1e-5)
+        @test cu_isapprox(conv2d_grad_w(x, w, dy), conv2d_grad_w(cx, cw, cdy); atol=1e-5)
 
         # with stride
         y = conv2d(x, w; stride=2)
         dy = randn(T, size(y))
         cy = CuArray(y)
         cdy = CuArray(dy)
-        @test isapprox(conv2d_grad_x(x, w, dy; stride=2),
+        @test cu_isapprox(conv2d_grad_x(x, w, dy; stride=2),
                        conv2d_grad_x(cx, cw, cdy; stride=2); atol=1e-5)
-        @test isapprox(conv2d_grad_w(x, w, dy; stride=2),
+        @test cu_isapprox(conv2d_grad_w(x, w, dy; stride=2),
                        conv2d_grad_w(cx, cw, cdy; stride=2); atol=1e-5)
 
         # with padding
@@ -39,9 +42,9 @@ using Base.Test
         dy = randn(T, size(y))
         cy = CuArray(y)
         cdy = CuArray(dy)
-        @test isapprox(conv2d_grad_x(x, w, dy; padding=1),
+        @test cu_isapprox(conv2d_grad_x(x, w, dy; padding=1),
                        conv2d_grad_x(cx, cw, cdy; padding=1); atol=1e-5)
-        @test isapprox(conv2d_grad_w(x, w, dy; padding=1),
+        @test cu_isapprox(conv2d_grad_w(x, w, dy; padding=1),
                        conv2d_grad_w(cx, cw, cdy; padding=1); atol=1e-5)
     end
 
@@ -54,30 +57,30 @@ end
         x = rand(T, 8, 8, 3, 2)
         cx = CuArray(x)
 
-        @test isapprox(pool(x), pool(cx))
-        @test isapprox(pool(x; stride=2), pool(cx; stride=2))
-        @test isapprox(pool(x; padding=1), pool(cx; padding=1))
+        @test cu_isapprox(pool(x), pool(cx))
+        @test cu_isapprox(pool(x; stride=2), pool(cx; stride=2))
+        @test cu_isapprox(pool(x; padding=1), pool(cx; padding=1))
 
         y = pool(x)
         dy = randn(T, size(y))
         cy = CuArray(y)
         cdy = CuArray(dy)
-        @test isapprox(pool_grad(x, y, dy), pool_grad(cx, cy, cdy); atol=1e-5)
+        @test cu_isapprox(pool_grad(x, y, dy), pool_grad(cx, cy, cdy); atol=1e-5)
 
         # with stride
         y = pool(x; stride=2)
         dy = randn(T, size(y))
         cy = CuArray(y)
         cdy = CuArray(dy)
-        @test isapprox(pool_grad(x, y, dy; stride=2), pool_grad(cx, cy, cdy; stride=2))
+        @test cu_isapprox(pool_grad(x, y, dy; stride=2), pool_grad(cx, cy, cdy; stride=2))
 
         # with padding
         y = pool(x; padding=1)
         dy = randn(T, size(y))
         cy = CuArray(y)
         cdy = CuArray(dy)
-        @test isapprox(pool_grad(x, y, dy; padding=1), pool_grad(cx, cy, cdy; padding=1))
-        @test isapprox(pool_grad(x, y, dy; padding=1), pool_grad(cx, cy, cdy; padding=1))
+        @test cu_isapprox(pool_grad(x, y, dy; padding=1), pool_grad(cx, cy, cdy; padding=1))
+        @test cu_isapprox(pool_grad(x, y, dy; padding=1), pool_grad(cx, cy, cdy; padding=1))
     end
 
 end
