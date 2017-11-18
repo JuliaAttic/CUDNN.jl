@@ -100,3 +100,20 @@ end
     end
 
 end
+
+
+@testset "softmax" begin
+
+    # softmax() in NNlib acts on 2D arrays, while cuDNN seems to only accept 4D ones
+    # so it's unclear how to test it and where we need it at all
+    # I keep a smoke test here to make sure functions are at least callable, but
+    # their correctness is in question
+    for T in [Float32, Float64]
+        x = CuArray(randn(T, 5, 4, 3, 2))
+        y = softmax4d(x)
+        dy = similar(y)
+
+        dx = softmax4d_grad(y, dy)
+    end
+
+end

@@ -20,7 +20,12 @@ export
     batchnorm_train,
     batchnorm_infer,
     batchnorm_grad,
-    BatchNormState
+    BatchNormState,
+    softmax4d!,
+    softmax4d,
+    softmax4d_grad!,
+    softmax4d_grad
+
 
 include("core.jl")
 
