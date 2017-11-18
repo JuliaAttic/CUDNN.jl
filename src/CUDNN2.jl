@@ -1,4 +1,4 @@
-module CuConv
+module CUDNN2
 
 export
     conv2d!,
