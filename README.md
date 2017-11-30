@@ -1,4 +1,9 @@
-# CUDNN2
+# CUDNN
+
+**Build status**: [![][buildbot-julia06-img]][buildbot-julia06-url]
+
+[buildbot-julia06-img]: http://ci.maleadt.net/shields/build.php?builder=CUDNN-julia06-x86-64bit&name=julia%200.6
+[buildbot-julia06-url]: http://ci.maleadt.net/shields/url.php?builder=CUDNN-julia06-x86-64bit
 
 Julia wrapper for NVIDIA's cuDNN  library.
 
