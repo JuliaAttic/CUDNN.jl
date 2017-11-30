@@ -1,4 +1,4 @@
-using CUDNN2
+using CUDNN
 using CuArrays
 using NNlib
 using Base.Test
