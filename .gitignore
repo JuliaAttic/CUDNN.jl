@@ -1,9 +1,5 @@
-bak
 *.jl.cov
+*.jl.*.cov
 *.jl.mem
-v0.?
-setenv.sh
 *~
-foo*
-.julia
-setup.sh
+.juliahistory

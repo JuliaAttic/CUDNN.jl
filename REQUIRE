@@ -1,3 +1,4 @@
-Compat
-CUDAdrv
 julia 0.6
+NNlib
+CuArrays
+CUDAapi
