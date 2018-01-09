@@ -1,12 +1,9 @@
-
-
-const toolkit = CUDAapi.find_toolkit()
-const libcudnn = CUDAapi.find_library("cudnn", toolkit)
+const libcudnn = CuArrays.libcudnn
 const Cptr = Ptr{Void}
 
 macro cuda(lib,fun,x...)        # give an error if library missing, or if error code!=0
-    if Libdl.find_library(["lib$lib"], []) != ""
-        fx = Expr(:call, :ccall, ("$fun","lib$lib"), :UInt32, x...)        
+    if libcudnn ≠ nothing
+        fx = Expr(:call, :ccall, ("$fun",libcudnn), :UInt32, x...)
         msg = "$lib.$fun error "
         err = gensym()
         # esc(:(if ($err=$fx) != 0; warn($msg, $err); Base.show_backtrace(STDOUT, backtrace()); end))
@@ -17,8 +14,8 @@ macro cuda(lib,fun,x...)        # give an error if library missing, or if error 
 end
 
 macro cuda1(lib,fun,x...)       # return -1 if library missing, error code if run
-    if Libdl.find_library(["lib$lib"], []) != ""
-        fx = Expr(:call, :ccall, ("$fun","lib$lib"), :UInt32, x...)
+    if libcudnn ≠ nothing
+        fx = Expr(:call, :ccall, ("$fun",libcudnn), :UInt32, x...)
         err = gensym()
         esc(:($err=$fx; @gs; $err))
     else
@@ -32,7 +29,7 @@ const CUDNN_VERSION = Ref{Int}(-1)
 
 function cudnn_version()
     if CUDNN_VERSION[] == -1
-        CUDNN_VERSION[] = Int(ccall((:cudnnGetVersion,:libcudnn),Csize_t,()))
+        CUDNN_VERSION[] = Int(ccall((:cudnnGetVersion,libcudnn),Csize_t,()))
     end
     return CUDNN_VERSION[]
 end
@@ -46,7 +43,7 @@ function cudnn_create_handle()
     handleP = Cptr[0]
     @cuda(cudnn, cudnnCreate, (Ptr{Cptr},), handleP)
     handle = handleP[1]
-    atexit(()->@cuda(cudnn,cudnnDestroy,(Cptr,), handle))    
+    atexit(()->@cuda(cudnn,cudnnDestroy,(Cptr,), handle))
     return handle
 end
 
@@ -55,7 +52,8 @@ end
 function cudnnhandle()
     if isempty(CUDNN_HANDLES)
         handle = cudnn_create_handle()
-        push!(CUDNN_HANDLES, handle) 
+        push!(CUDNN_HANDLES, handle)
     end
     return CUDNN_HANDLES[1]
 end
+
