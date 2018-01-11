@@ -1,4 +1,3 @@
-
 mutable struct TD; ptr
     function TD(a::CuArray)
         d = Cptr[0]
@@ -10,7 +9,7 @@ mutable struct TD; ptr
               (Cptr,UInt32,Cint,Ptr{Cint},Ptr{Cint}),
               d[1], DT(a), n, sz, st)
         td = new(d[1])
-        finalizer(td, x->@cuda(cudnn,cudnnDestroyTensorDescriptor,(Cptr,),x.ptr))
+        finalizer(td, x->@cuda(cudnn,cudnnDestroyTensorDescriptor,(Cptr,),x))
         return td
     end
 end
@@ -36,7 +35,7 @@ mutable struct FD; ptr
                   d[1], DT(a),    n,   sz)
         end
         fd = new(d[1])
-        finalizer(fd, x->@cuda(cudnn,cudnnDestroyFilterDescriptor,(Cptr,),x.ptr))
+        finalizer(fd, x->@cuda(cudnn,cudnnDestroyFilterDescriptor,(Cptr,),x))
         return fd
     end
 end
@@ -61,7 +60,7 @@ mutable struct CD; ptr
                   d[1],nd,cdsize(padding,nd),cdsize(stride,nd),cdsize(upscale,nd),mode)
         end
         cd = new(d[1])
-        finalizer(cd, x->@cuda(cudnn,cudnnDestroyConvolutionDescriptor,(Cptr,),x.ptr))
+        finalizer(cd, x->@cuda(cudnn,cudnnDestroyConvolutionDescriptor,(Cptr,),x))
         return cd
     end
 end
@@ -86,11 +85,10 @@ mutable struct PD; ptr
                   d[1],mode,nd,cdsize(window,nd),cdsize(padding,nd),cdsize(stride,nd))
         end
         pd = new(d[1])
-        finalizer(pd, x->@cuda(cudnn,cudnnDestroyPoolingDescriptor,(Cptr,),x.ptr))
+        finalizer(pd, x->@cuda(cudnn,cudnnDestroyPoolingDescriptor,(Cptr,),x))
         return pd
     end
 end
-
 
 # mutable struct RNN_D; ptr
 #     function RNN_D(h_size::Int, num_layers::Int; handle=cudnnhandle())
@@ -101,21 +99,12 @@ end
 
 
 #         rnn_d = new(d[1])
-#         finalizer(rnn_d, x->@cuda(cudnn,cudnnDestroyRNNDescriptor,(Cptr,),x.ptr))
+#         finalizer(rnn_d, x->@cuda(cudnn,cudnnDestroyRNNDescriptor,(Cptr,),x))
 #         return rnn_d
 #     end
 # end
 
-
-
-
-
-
-
-
-
-import Base: unsafe_convert
-unsafe_convert(::Type{Cptr}, td::TD)=td.ptr
-unsafe_convert(::Type{Cptr}, fd::FD)=fd.ptr
-unsafe_convert(::Type{Cptr}, cd::CD)=cd.ptr
-unsafe_convert(::Type{Cptr}, pd::PD)=pd.ptr
+Base.unsafe_convert(::Type{Cptr}, td::TD)=td.ptr
+Base.unsafe_convert(::Type{Cptr}, fd::FD)=fd.ptr
+Base.unsafe_convert(::Type{Cptr}, cd::CD)=cd.ptr
+Base.unsafe_convert(::Type{Cptr}, pd::PD)=pd.ptr
