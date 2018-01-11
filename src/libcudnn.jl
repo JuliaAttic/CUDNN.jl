@@ -2,7 +2,8 @@
 # Automatically generated using Clang.jl wrap_c, version 0.0.0
 
 const toolkit = CUDAapi.find_toolkit()
-const libcudnn = CUDAapi.find_library("cudnn", toolkit)
+const libcudnn = CUDAapi.find_cuda_library("cudnn", toolkit)
+libcudnn == nothing && error("Could not find libcudnn")
 
 
 function cudaDeviceReset()
