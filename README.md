@@ -1,3 +1,7 @@
+### Note: This package is being phased out.
+
+The same functionality is available with [CuArrays](https://github.com/JuliaGPU/CuArrays.jl).
+
 # CUDNN
 
 **Build status**: [![][buildbot-julia06-img]][buildbot-julia06-url]
