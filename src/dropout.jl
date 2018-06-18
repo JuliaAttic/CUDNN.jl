@@ -23,10 +23,10 @@ function DOD(dropout::Float32; handle=cudnnhandle(), states=C_NULL,
     # should we return it in DOD?
     @cuda(cudnn, cudnnSetDropoutDescriptor,
           (Ref{Cptr}, Cptr, Cfloat, Cptr, Cuint, Culong),
-          d, handle, dropout, states.ptr, statesSizeInBytes[], seed)
+          d, handle, dropout, states, statesSizeInBytes[], seed)
     dod = DOD(d[], states)
-    finalizer(dod, x->@cuda(cudnn, cudnnDestroyDropoutDescriptor, (Cptr,), x.ptr))
-    # finalizer(dod, x -> cudnnDestroyDropoutDescriptor(x.ptr))
+    finalizer(dod, x->@cuda(cudnn, cudnnDestroyDropoutDescriptor, (Cptr,), x))
+    # finalizer(dod, x -> cudnnDestroyDropoutDescriptor(x))
     return dod
 end
 
@@ -48,7 +48,7 @@ end
 function  get_reserve_space_size(x::CuArray{T}) where T
     td = TD(x)
     sz = Ref{Csize_t}(0)
-    @cuda(cudnn, cudnnDropoutGetReserveSpaceSize, (Cptr, Ref{Csize_t}), td.ptr, sz)
+    @cuda(cudnn, cudnnDropoutGetReserveSpaceSize, (Cptr, Ref{Csize_t}), td, sz)
     return sz[]
 end
 
@@ -75,7 +75,7 @@ function dropout_forward!(y::CuArray{T}, x::CuArray{T}, dropout::Float64;
     @cuda(cudnn, cudnnDropoutForward,
           #  (Cptr, Cptr, Cptr, Cptr, Cptr, Cptr, Cptr, Csize_t),
           (Cptr, Cptr, Cptr, Cptr, Cptr, Cptr, Cptr, Csize_t),
-          handle, dod.ptr, xtd.ptr, x.ptr, ytd.ptr, y.ptr, rs.ptr, rs_sz)
+          handle, dod, xtd, x, ytd, y, rs, rs_sz)
     
 end
 
@@ -99,6 +99,6 @@ function main()
     reserveSizeInBytes = Cint(get_reserve_space_size(x))
     
     
-    cudnnDropoutForward(handle, dropoutDesc.ptr, xdesc, x.ptr, ydesc, y.ptr, reserveSpace,
+    cudnnDropoutForward(handle, dropoutDesc, xdesc, x, ydesc, y, reserveSpace,
                         reserveSizeInBytes)
 end

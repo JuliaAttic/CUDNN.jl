@@ -1,7 +1,8 @@
 
 
 const toolkit = CUDAapi.find_toolkit()
-const libcudnn = CUDAapi.find_library("cudnn", toolkit)
+const libcudnn = CUDAapi.find_cuda_library("cudnn", toolkit)
+libcudnn == nothing && error("Could not find libcudnn")
 const Cptr = Ptr{Void}
 
 macro cuda(lib,fun,x...)        # give an error if library missing, or if error code!=0
