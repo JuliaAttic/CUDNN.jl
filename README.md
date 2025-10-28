@@ -1,6 +1,6 @@
 ### Note: This package is being phased out.
 
-The same functionality is available with [CuArrays](https://github.com/JuliaGPU/CuArrays.jl).
+The same functionality is available with [CUDA](https://github.com/JuliaGPU/CUDA.jl).
 
 # CUDNN
 
