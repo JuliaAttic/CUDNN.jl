@@ -6,7 +6,7 @@ function softmax4d!(y::CuArray{T}, x::CuArray{T};
                  alpha=1.0, beta=0.0) where T
     @cuda(cudnn, cudnnSoftmaxForward,
           (Cptr, Cuint, Cuint, Ptr{T}, Cptr, Ptr{T}, Ptr{T}, Cptr, Ptr{T}),
-          handle, algorithm, mode, Ref(T(alpha)), TD(x), x.ptr, Ref(T(beta)), TD(y), y.ptr)
+          handle, algorithm, mode, Ref(T(alpha)), TD(x), x, Ref(T(beta)), TD(y), y)
     return y
 end
 
@@ -24,9 +24,9 @@ function softmax4d_grad!(dx::CuArray{T}, y::CuArray{T}, dy::CuArray{T};
            Cptr, Ptr{T},
            Ptr{T}, Cptr, Ptr{T}),
           handle, algorithm, mode,
-          Ref(T(alpha)), TD(y), y.ptr,
-          TD(dy), dy.ptr,
-          Ref(T(beta)), TD(dx), dx.ptr)
+          Ref(T(alpha)), TD(y), y,
+          TD(dy), dy,
+          Ref(T(beta)), TD(dx), dx)
     return dx
 end
 

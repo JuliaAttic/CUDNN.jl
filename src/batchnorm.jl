@@ -4,6 +4,7 @@
 mutable struct BND
     ptr::Ptr{Void}
 end
+Base.unsafe_convert(::Type{Cptr}, bnd::BND) = bnd.ptr
 
 
 function BND(xtd::TD, mode::Cuint)
@@ -11,7 +12,7 @@ function BND(xtd::TD, mode::Cuint)
     @cuda(cudnn, cudnnCreateTensorDescriptor, (Ptr{Cptr},), d)
     @cuda(cudnn, cudnnDeriveBNTensorDescriptor,
           (Ref{Void}, Cptr, Cuint),
-          d[], xtd.ptr, mode)
+          d[], xtd, mode)
     return BND(d[])
 end
 
@@ -63,10 +64,10 @@ function batchnorm_train!(y::CuArray{T,4}, x::CuArray{T,4}, s::BatchNormState;
            Cptr, Cptr, Cptr, Cdouble,
            Cptr, Cptr, Cdouble,
            Cptr, Cptr),
-          handle, mode, Ref(T(alpha)), Ref(T(beta)), xtd.ptr, x.ptr, ytd.ptr, y.ptr,
-          bnScaleBiasMeanVarDesc.ptr, s.bnScale.ptr, s.bnBias.ptr, exponentialAverageFactor,
-          s.resultRunningMean.ptr, s.resultRunningVariance.ptr, epsilon,
-          s.resultSaveMean.ptr, s.resultSaveInvVariance.ptr)
+          handle, mode, Ref(T(alpha)), Ref(T(beta)), xtd, x, ytd, y,
+          bnScaleBiasMeanVarDesc, s.bnScale, s.bnBias, exponentialAverageFactor,
+          s.resultRunningMean, s.resultRunningVariance, epsilon,
+          s.resultSaveMean, s.resultSaveInvVariance)
 
 end
 
@@ -92,9 +93,9 @@ function batchnorm_infer!(y::CuArray{T,4}, x::CuArray{T,4}, s::BatchNormState;
           (Cptr, UInt32, Cptr, Cptr, Cptr, Cptr, Cptr, Cptr,
            Cptr, Cptr, Cptr,
            Cptr, Cptr, Cdouble),
-          handle, mode, Ref(T(alpha)), Ref(T(beta)), xtd.ptr, x.ptr, ytd.ptr, y.ptr,
-          bnScaleBiasMeanVarDesc.ptr, s.bnScale.ptr, s.bnBias.ptr,
-          estimatedMean.ptr, estimatedVariance.ptr, epsilon)
+          handle, mode, Ref(T(alpha)), Ref(T(beta)), xtd, x, ytd, y,
+          bnScaleBiasMeanVarDesc, s.bnScale, s.bnBias,
+          estimatedMean, estimatedVariance, epsilon)
 end
 
 function batchnorm_infer(x::CuArray{T,4}, s::BatchNormState; opts...) where T
@@ -126,9 +127,9 @@ function batchnorm_grad!(dx::CuArray{T,4}, x::CuArray{T,4}, dy::CuArray{T,4}, s:
            Cptr, Cptr, Cptr, Cptr,
            Cdouble, Cptr, Cptr),
           handle, mode, Ref(T(alpha_data)), Ref(T(beta_data)), Ref(T(alpha_param)), Ref(T(beta_param)),
-          xtd.ptr, x.ptr, dytd.ptr, dy.ptr, dxtd.ptr, dx.ptr,
-          bnScaleBiasMeanVarDesc.ptr, s.bnScale.ptr, resultBnScaleDiff.ptr, resultBnBiasDiff.ptr,
-          epsilon, savedMean.ptr, savedInvVariance.ptr)
+          xtd, x, dytd, dy, dxtd, dx,
+          bnScaleBiasMeanVarDesc, s.bnScale, resultBnScaleDiff, resultBnBiasDiff,
+          epsilon, savedMean, savedInvVariance)
 end
 
 

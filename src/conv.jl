@@ -6,8 +6,8 @@ function conv2d!{T}(y::CuArray{T}, x::CuArray{T}, w::CuArray{T};
                     alpha=1, beta=0, o...) # padding=0, stride=1, upscale=1, mode=0
     @cuda(cudnn, cudnnConvolutionForward,
           (Cptr,Ptr{T},Cptr,Ptr{T},Cptr,Ptr{T},Cptr,UInt32,Cptr,Csize_t,Ptr{T},Cptr,Ptr{T}),
-          handle,Ref(T(alpha)),TD(x),x.ptr,FD(w),w.ptr,CD(w,x;o...),algo,workSpace,
-          workSpaceSizeInBytes,Ref(T(beta)),TD(y),y.ptr)
+          handle,Ref(T(alpha)),TD(x),x,FD(w),w,CD(w,x;o...),algo,workSpace,
+          workSpaceSizeInBytes,Ref(T(beta)),TD(y),y)
     return y
 end
 
@@ -29,18 +29,18 @@ function conv2_grad_x!{T}(dx::CuArray{T}, x::CuArray{T}, w::CuArray{T}, dy::CuAr
     if cudnnVersion >= 4000
         @cuda(cudnn,cudnnConvolutionBackwardData,
               (Cptr,Ptr{T},Cptr,Ptr{T},Cptr,Ptr{T},Cptr,UInt32,Cptr,Csize_t,Ptr{T},Cptr,Ptr{T}),
-              handle,Ref(T(alpha)),FD(w),w.ptr,TD(dy),dy.ptr,CD(w,x;o...),algo,workSpace,
-              workSpaceSizeInBytes,Ref(T(beta)),TD(dx),dx.ptr)
+              handle,Ref(T(alpha)),FD(w),w,TD(dy),dy,CD(w,x;o...),algo,workSpace,
+              workSpaceSizeInBytes,Ref(T(beta)),TD(dx),dx)
     elseif cudnnVersion >= 3000
         @cuda(cudnn,cudnnConvolutionBackwardData_v3,
               (Cptr,Ptr{T},Cptr,Ptr{T},Cptr,Ptr{T},Cptr,UInt32,Cptr,Csize_t,Ptr{T},Cptr,Ptr{T}),
-              handle,Ref(T(alpha)),FD(w),w.ptr,TD(dy),dy.ptr,CD(w,x;o...),algo,workSpace,
-              workSpaceSizeInBytes,Ref(T(beta)),TD(dx),dx.ptr)
+              handle,Ref(T(alpha)),FD(w),w,TD(dy),dy,CD(w,x;o...),algo,workSpace,
+              workSpaceSizeInBytes,Ref(T(beta)),TD(dx),dx)
     else
         @cuda(cudnn,cudnnConvolutionBackwardData,
               (Cptr,Ptr{T},Cptr,Ptr{T},Cptr,Ptr{T},Cptr,Ptr{T},Cptr,Ptr{T}),
-              handle,Ref(T(alpha)),FD(w),w.ptr,TD(dy),dy.ptr,CD(w,x;o...),
-              Ref(T(beta)),TD(dx),dx.ptr)
+              handle,Ref(T(alpha)),FD(w),w,TD(dy),dy,CD(w,x;o...),
+              Ref(T(beta)),TD(dx),dx)
     end
     return dx
 end
@@ -64,17 +64,17 @@ function conv2d_grad_w!{T}(dw::CuArray{T}, x::CuArray{T}, w::CuArray{T}, dy::CuA
     if cudnnVersion >= 4000
         @cuda(cudnn,cudnnConvolutionBackwardFilter,
               (Cptr,Ptr{T},Cptr,Ptr{T},Cptr,Ptr{T},Cptr,UInt32,Cptr,Csize_t,Ptr{T},Cptr,Ptr{T}),
-              handle,Ref(T(alpha)),TD(x),x.ptr,TD(dy),dy.ptr,CD(w,x;o...),algo,workSpace,
-              workSpaceSizeInBytes,Ref(T(beta)),FD(dw),dw.ptr)
+              handle,Ref(T(alpha)),TD(x),x,TD(dy),dy,CD(w,x;o...),algo,workSpace,
+              workSpaceSizeInBytes,Ref(T(beta)),FD(dw),dw)
     elseif cudnnVersion >= 3000
         @cuda(cudnn,cudnnConvolutionBackwardFilter_v3,
               (Cptr,Ptr{T},Cptr,Ptr{T},Cptr,Ptr{T},Cptr,UInt32,Cptr,Csize_t,Ptr{T},Cptr,Ptr{T}),
-              handle,Ref(T(alpha)),TD(x),x.ptr,TD(dy),dy.ptr,CD(w,x;o...),algo,workSpace,
-              workSpaceSizeInBytes,Ref(T(beta)),FD(dw),dw.ptr)
+              handle,Ref(T(alpha)),TD(x),x,TD(dy),dy,CD(w,x;o...),algo,workSpace,
+              workSpaceSizeInBytes,Ref(T(beta)),FD(dw),dw)
     else
         @cuda(cudnn,cudnnConvolutionBackwardFilter,
               (Cptr,Ptr{T},Cptr,Ptr{T},Cptr,Ptr{T},Cptr,       Ptr{T},Cptr,Ptr{T}),
-              handle,Ref(T(alpha)),TD(x),x.ptr,TD(dy),dy.ptr,CD(w,x;o...),Ref(T(beta)),FD(dw),dw.ptr)
+              handle,Ref(T(alpha)),TD(x),x,TD(dy),dy,CD(w,x;o...),Ref(T(beta)),FD(dw),dw)
     end
     return dw
 end

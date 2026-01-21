@@ -1,4 +1,4 @@
 julia 0.6
 NNlib
 CuArrays
-CUDAapi
+CUDAapi 0.3.0
